@@ -1,0 +1,89 @@
+# Base config. Overlay a second file for experiments / dry runs:
+#   python -m src.train_gbm --config configs/base.yaml configs/dryrun.yaml
+# Relative paths resolve against the repo root.
+
+seed: 42
+task: regression          # regression | classification | extraction
+metric: smape             # key in src/metrics.py METRICS — verify against the official metric on Day 1
+target_transform: log1p   # log1p | none — regression models train on this, preds are inverted
+min_pred: 0.01            # regression predictions are clipped to at least this
+
+paths:
+  train_csv: data/raw/train.csv
+  test_csv: data/raw/test.csv
+  sample_sub: null        # e.g. data/raw/sample_test_out.csv — defines submission columns/order when set
+  images_dir: data/images
+  cache_dir: data/cache
+  preds_dir: data/cache/preds
+  submissions_dir: submissions
+  experiments_csv: experiments.csv
+
+columns:
+  id: sample_id
+  target: price
+  text: catalog_content
+  image_url: image_link
+  group: null             # set to a column name to force GroupKFold
+
+cv:
+  n_folds: 5
+  scheme: auto            # auto | kfold | stratified | group
+  n_bins: 10              # quantile bins for stratifying a regression target
+
+text_features:
+  word_max_features: 50000
+  char_max_features: 50000
+  svd_components: 64
+  fit_on_test: false      # fit TF-IDF/SVD on train text only unless the rules clearly allow transductive fitting
+
+images:
+  workers: 64
+  max_side: 512
+  timeout: 15
+  retries: 3
+
+embed:
+  # all-MiniLM-L6-v2: Apache 2.0. open_clip ViT-B-32 laion2b: MIT. Re-check licenses for anything swapped in.
+  text_model: sentence-transformers/all-MiniLM-L6-v2
+  text_batch_size: 256
+  text_max_length: 256
+  image_model: ViT-B-32
+  image_pretrained: laion2b_s34b_b79k
+  image_batch_size: 256
+  num_workers: 4
+
+gbm:
+  model: lightgbm         # lightgbm | catboost
+  features: [hand, svd]   # add txt / img / has_image once embeddings are cached
+  early_stopping_rounds: 200
+  lightgbm:
+    n_estimators: 5000
+    learning_rate: 0.03
+    num_leaves: 127
+    min_child_samples: 20
+    subsample: 0.8
+    subsample_freq: 1
+    colsample_bytree: 0.5
+    reg_lambda: 1.0
+    objective: regression_l1   # L1 on log target tracks SMAPE/MAPE better than L2
+    verbose: -1
+  catboost:
+    iterations: 5000
+    learning_rate: 0.05
+    depth: 8
+    loss_function: MAE
+    task_type: CPU        # GPU on a g4dn/g5 instance
+    verbose: 500
+
+fusion:
+  features: [txt, img, has_image]   # txt/img expand to the configured embedding caches
+  hidden: [1024, 256]
+  dropout: 0.2
+  lr: 0.001
+  weight_decay: 0.0001
+  epochs: 40
+  batch_size: 512
+  patience: 6
+  loss: l1_log            # l1_log | huber | smape_surrogate
+  huber_delta: 0.5
+  seeds: [0, 1, 2]
