@@ -1,2 +1,4 @@
 timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T03:23:22,lgb_v1_0925_032005,user,lightgbm,72 features,0.98031,,"t=0.65 m=0.2 {'f05_India': 0.9778019709611492, 'f05_US': 0.981985501047885}"
+2026-09-25T03:56:18,lgb_bigtrain_0925_033136,user,lightgbm,72 features,0.98250,,"t=0.6 m=0.5 {'f05_India': 0.9805803274362828, 'f05_US': 0.9837857845490425} train_frac 0.45, lr 0.05"
+2026-09-25T04:26:55,lgb_sib_0925_040217,user,lightgbm,76 features,0.98279,,"t=0.6 m=0.5 {'f05_India': 0.980966638301724, 'f05_US': 0.9839995708989735} bigtrain + sibling features"

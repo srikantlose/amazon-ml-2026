@@ -19,7 +19,7 @@ from rapidfuzz import fuzz, process
 from rapidfuzz.distance import JaroWinkler
 
 from src.blocking import VIEW_BITS, pruned_path
-from src.normalize import LEGAL_FORMS, load_records
+from src.normalize import LEGAL_FORMS, STATES, load_records
 from src.utils import add_config_arg, cache_dir, get_logger, load_config, timer
 
 log = get_logger("features")
@@ -35,6 +35,7 @@ def record_arrays(df: pd.DataFrame) -> dict:
     df["first"] = df["name_core"].str.split(n=1).str[0].fillna("")
     for c in STRING_FIELDS:
         out[c] = df[c].to_numpy(dtype=object)
+    out["states"] = df["addr_n"].map(_state_set).to_numpy(dtype=object)
     out["name_len"] = df["name_n"].str.len().to_numpy(np.float32)
     out["addr_len"] = df["addr_n"].str.len().to_numpy(np.float32)
     out["name_ntok"] = (df["name_n"].str.count(" ") + 1).to_numpy(np.float32)
@@ -118,6 +119,78 @@ def group_features(cands: pd.DataFrame, s1_country: np.ndarray | None = None) ->
     return pd.DataFrame(out)
 
 
+def sibling_features(cands: pd.DataFrame, B: dict, min_p1: float = 0.8, max_sib: int = 4) -> pd.DataFrame:
+    """Similarity of each record to the other records confidently linked to the same S1.
+
+    Records of one business in S2 and S3 often resemble each other more than either resembles
+    the S1 record (e.g. both drop the same word, or both carry the address S1 spells differently).
+    "Confident" = the record's best stage-1 candidate with p1 >= min_p1; up to max_sib per S1.
+    Uses only stage-1 probabilities (out-of-fold on train), never labels.
+    """
+    s1 = cands["s1"].to_numpy(np.int64)
+    rec = cands["rec"].to_numpy(np.int64)
+    p1 = cands["p1"].to_numpy(np.float32)
+    rank = _group_stats(rec, p1)[0]
+    conf = np.flatnonzero((rank == 0) & (p1 >= min_p1))
+    sib = pd.DataFrame({"s1": s1[conf], "sib": rec[conf], "p": p1[conf]})
+    sib = sib.sort_values(["s1", "p"], ascending=[True, False])
+    sib = sib[sib.groupby("s1").cumcount() < max_sib + 1]      # +1: the record itself may be one of them
+    pairs = pd.DataFrame({"pair": np.arange(len(cands)), "s1": s1, "rec": rec})
+    t = pairs.merge(sib[["s1", "sib"]], on="s1")
+    t = t[t["rec"] != t["sib"]]
+    pi, ri, si = t["pair"].to_numpy(), t["rec"].to_numpy(), t["sib"].to_numpy()
+    out = {}
+    for name, field, scorer in (("sib_name", "name_n", fuzz.token_set_ratio),
+                                ("sib_ns", "name_ns", fuzz.ratio),
+                                ("sib_addr", "addr_n", fuzz.token_set_ratio)):
+        v = _cp(B[field][ri], B[field][si], scorer).astype(np.float32)
+        best = np.full(len(cands), -1.0, np.float32)
+        np.maximum.at(best, pi, v)
+        out[name] = np.where(best < 0, np.nan, best).astype(np.float32)
+    out["n_sib"] = np.bincount(pi, minlength=len(cands)).astype(np.float32)
+    return pd.DataFrame(out)
+
+
+# "la" (Louisiana) is left out: French localities start with it ("la teste de buch", "la baule")
+STATE_CODES = frozenset(STATES.values()) - {"la"}
+
+
+def _state_set(addr: str) -> str:
+    """State codes at either end of the address (where US/India addresses put them).
+
+    Only the first/last alphabetic token is considered: codes such as "de"/"la" are ordinary
+    words inside French addresses ("rue de la paix"), which would make the feature mean
+    something else there.
+    """
+    toks = [t for t in addr.split() if t.isalpha()]
+    if not toks:
+        return ""
+    return " ".join(sorted({t for t in (toks[0], toks[-1]) if t in STATE_CODES}))
+
+
+def name_frequency(s1_df: pd.DataFrame, rec_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """How many S1 records (same country) share each S1's / each record's name_core.
+
+    A unique name with an empty address is strong evidence; a name shared by many S1 records
+    ("modern foods llp") needs the address to decide.
+    """
+    counts = s1_df.groupby(["country", "name_core"]).size()
+    s1_freq = counts.reindex(pd.MultiIndex.from_arrays([s1_df["country"], s1_df["name_core"]])).to_numpy()
+    rec_freq = counts.reindex(pd.MultiIndex.from_arrays([rec_df["country"], rec_df["name_core"]])).fillna(0).to_numpy()
+    return s1_freq.astype(np.float32), rec_freq.astype(np.float32)
+
+
+def name_ambiguity(cands: pd.DataFrame, A: dict, B: dict) -> pd.DataFrame:
+    """Within each record's candidates: rank/gap of core-name similarity and how many candidates
+    have a near-identical name (several same-name S1 records -> the address must decide)."""
+    s1 = cands["s1"].to_numpy(np.int64)
+    rec = cands["rec"].to_numpy(np.int64)
+    sim = _cp(A["name_core"][s1], B["name_core"][rec], fuzz.ratio).astype(np.float32)
+    rank, gmax, _, _ = _group_stats(rec, sim)
+    near = np.bincount(rec, weights=(sim >= 90).astype(np.float64))[rec].astype(np.float32)
+    return pd.DataFrame({"rec_rank_cname": rank, "rec_gap_cname": gmax - sim, "rec_n_same_name": near})
+
+
 def _cp(a, b, scorer, dtype=np.uint8):
     return process.cpdist(a, b, scorer=scorer, workers=-1, dtype=dtype)
 
@@ -154,6 +227,9 @@ def pair_features(A: dict, B: dict, ia: np.ndarray, ib: np.ndarray) -> pd.DataFr
     f["num_tset"] = np.where(both_nums, _cp(anum, bnum, fuzz.token_set_ratio), np.nan).astype(np.float32)
     f["num_tsort"] = np.where(both_nums, _cp(anum, bnum, fuzz.token_sort_ratio), np.nan).astype(np.float32)
     f["house_eq"] = _eq_or_nan(g(A, "house", ia), g(B, "house", ib))
+    f["state_eq"] = _eq_or_nan(g(A, "states", ia), g(B, "states", ib))
+    f["s1_name_freq"] = A["name_freq"][ia]
+    f["rec_name_s1_freq"] = B["name_freq"][ib]
     f["postal_eq"] = _eq_or_nan(g(A, "postal", ia), g(B, "postal", ib))
     f["legal_eq"] = _eq_or_nan(g(A, "legal", ia), g(B, "legal", ib))
     af, bf = g(A, "first", ia), g(B, "first", ib)
@@ -182,8 +258,11 @@ def build(cfg: dict, split: str) -> None:
     s23 = load_records(cfg, split, "s23")
     with timer("record arrays", log):
         A, B = record_arrays(s1), record_arrays(s23)
+        A["name_freq"], B["name_freq"] = name_frequency(s1, s23)
     with timer("group features", log):
         grp = group_features(cands, s1["country"].to_numpy())
+    with timer("sibling + name ambiguity features", log):
+        grp = pd.concat([grp, sibling_features(cands, B), name_ambiguity(cands, A, B)], axis=1)
     views = cands["views"].to_numpy()
     out = features_dir(cfg, split)
     shutil.rmtree(out, ignore_errors=True)

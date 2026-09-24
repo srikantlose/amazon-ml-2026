@@ -23,6 +23,18 @@
 - Missed pairs, typical cases: brand token kept while the descriptive words change, plus an empty address; trade names with partial address overlap.
 - Test union: 218,065,014 pairs. Runtime: train 31 min, test 25 min (RTX 4060 + 12 CPU workers).
 
+## Stage-1 pruning (train, OOF)
+- top_n 5 / p ≥ 0.001: 221.8M → 12.25M pairs (1.19 per record); recall 0.9823 → 0.9795; oracle 0.9944 → 0.9936.
+- Test: 218.1M → 12.14M pairs (1.22 per record).
+
+## Error decomposition (v1, OOF, t=0.65 m=0.2)
+- FP 42.6K (34K distractor records, 8.7K records of another entity) → fixing all: +0.0048.
+- FN inside candidates 180K (176K records left unassigned, 4.7K assigned elsewhere) → fixing all: +0.0085.
+- Blocking/pruning misses 156.5K pairs.
+- Decision variants (wider margin grid, expected-F0.5 decoding) gave only +0.0002 → the decision rule is not the bottleneck.
+
 ## Experiments
 | run | change | blocking recall | OOF F0.5 | LB |
 |---|---|---|---|---|
+| lgb_v1_0925_032005 (sub-01) | 72 features, 10% S1 groups per fold, lr 0.08 | 0.9795 | 0.98031 (US 0.9820, IN 0.9778) | |
+| lgb_bigtrain_0925_033136 | 45% S1 groups, lr 0.05 (~3.3K trees) | 0.9795 | 0.98250 (US 0.9838, IN 0.9806) | |
