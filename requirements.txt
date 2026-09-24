@@ -1,36 +1,16 @@
-# Target: SageMaker Notebook Instance, kernel conda_pytorch_p310 (Python 3.10, Linux).
-# torch/torchvision, boto3 and sagemaker are preinstalled in that kernel; pip leaves
-# them alone if already satisfied. Elsewhere, install torch from the CUDA index first:
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-
-# core
-pandas
+# Business entity resolution pipeline. Exact versions are pinned into the submission
+# package by scripts/make_submission_zip.py (pip freeze of the environment used).
+# torch: install the CUDA build first, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# (the CPU build works too; blocking just runs slower)
 numpy
+pandas
 pyarrow
 scipy
 scikit-learn
+lightgbm
+rapidfuzz
+anyascii
 pyyaml
 tqdm
-requests
-pillow
-matplotlib
-
-# GBMs
-lightgbm
-xgboost
-catboost
-
-# deep learning
 torch
-torchvision
-transformers
-sentence-transformers
-open_clip_torch
-peft
-accelerate
-bitsandbytes
-
-# AWS / data access
-boto3
-sagemaker
-kaggle

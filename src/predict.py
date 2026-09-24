@@ -1,79 +1,90 @@
-"""Turn a saved run's test predictions into a submission CSV, then validate it.
+"""Test inference: average the fold models, apply the tuned decision, write both output files.
 
-    python -m src.predict --config configs/base.yaml --run ens_0926_203000
+    python -m src.predict --config configs/base.yaml --run <run_id>
 
-Columns and their order come from paths.sample_sub when set, otherwise [id, target].
-Rows follow the test CSV order. Output: {submissions_dir}/{run_id}.csv
+Writes output/matching_results.tsv (leaderboard file) and output/candidate_pairs.tsv (every
+pair the model scored), then runs the validators.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from pathlib import Path
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from src.utils import add_config_arg, get_logger, get_path, load_config, load_preds, read_split
-from src.validate_submission import validate
+from src.blocking import pruned_path
+from src.data import CANDIDATE_HEADER, MATCHING_HEADER
+from src.decide import select
+from src.features import features_dir
+from src.normalize import records_path
+from src.train_matcher import run_dir
+from src.utils import add_config_arg, get_logger, load_config, resolve, timer
+from src.validate import validate
 
 log = get_logger("predict")
 
 
-def submission_columns(cfg: dict) -> tuple[list[str], str]:
-    """(ordered columns, prediction column name)."""
-    id_col, target_col = cfg["columns"]["id"], cfg["columns"]["target"]
-    sample = get_path(cfg, "sample_sub")
-    if sample is not None and sample.exists():
-        cols = list(pd.read_csv(sample, nrows=0).columns)
-        pred_cols = [c for c in cols if c != id_col]
-        if len(pred_cols) == 1:
-            return cols, pred_cols[0]
-        log.warning("sample submission has columns %s; using %r as the prediction column", cols, target_col)
-        return cols, target_col
-    return [id_col, target_col], target_col
+def write_pairs_as_lists(path, header, s1_ids: np.ndarray, rec_ids: np.ndarray,
+                         s1: np.ndarray, rec: np.ndarray) -> None:
+    """One row per S1 (in s1_ids order) with its record ids comma-joined; "\\n" line endings.
+
+    Works on index arrays (sorted by S1) to avoid building tens of millions of string pairs.
+    """
+    order = np.lexsort((rec, s1))
+    s1_sorted, rec_sorted = s1[order], rec[order]
+    bounds = np.searchsorted(s1_sorted, np.arange(len(s1_ids) + 1))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\t".join(header) + "\n")
+        for i, sid in enumerate(s1_ids):
+            a, b = bounds[i], bounds[i + 1]
+            f.write(f"{sid}\t{','.join(rec_ids[rec_sorted[a:b]]) if b > a else ''}\n")
 
 
-def write_submission(cfg: dict, test_pred: np.ndarray, run_id: str, classes=None, out: Path | None = None) -> Path:
-    id_col = cfg["columns"]["id"]
-    test = read_split(cfg, "test")
-    test_pred = np.asarray(test_pred)
-    if len(test_pred) != len(test):
-        raise ValueError(f"{len(test_pred)} predictions for {len(test)} test rows")
-
-    if cfg["task"] == "regression":
-        values = np.clip(test_pred.astype(np.float64), cfg.get("min_pred", 0.0), None)
-    elif cfg["task"] == "classification" and test_pred.ndim == 2:
-        values = np.asarray(classes)[test_pred.argmax(axis=1)]
-    else:
-        values = test_pred
-
-    cols, pred_col = submission_columns(cfg)
-    sub = pd.DataFrame({id_col: test[id_col].values, pred_col: values})[cols]
-    out = out or get_path(cfg, "submissions_dir") / f"{run_id}.csv"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    sub.to_csv(out, index=False)
-    log.info("wrote %s (%d rows)", out, len(sub))
-
-    errors = validate(out, get_path(cfg, "test_csv"), id_col, pred_col, cfg["task"],
-                      sample_path=get_path(cfg, "sample_sub"))
-    if errors:
-        for e in errors:
-            log.error("INVALID: %s", e)
-        sys.exit(1)
-    log.info("submission valid: %s", out)
-    return out
+def predict_test(cfg: dict, run_id: str) -> np.ndarray:
+    d = run_dir(cfg, run_id)
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    boosters = [lgb.Booster(model_file=str(p)) for p in sorted(d.glob("model_fold*.txt"))]
+    parts = sorted(features_dir(cfg, "test").glob("part_*.parquet"))
+    probs = []
+    with timer(f"predict test with {len(boosters)} models", log):
+        for p in parts:
+            X = pd.read_parquet(p, columns=meta["features"])
+            probs.append(np.mean([b.predict(X) for b in boosters], axis=0).astype(np.float32))
+    prob = np.concatenate(probs)
+    np.save(d / "test_prob.npy", prob)
+    return prob
 
 
 def main():
     ap = argparse.ArgumentParser()
     add_config_arg(ap)
-    ap.add_argument("--run", required=True, help="run id with saved test preds")
-    ap.add_argument("--out", help="output path (default: submissions_dir/{run}.csv)")
+    ap.add_argument("--run", required=True)
+    ap.add_argument("--threshold", type=float, help="override the tuned threshold")
+    ap.add_argument("--margin", type=float, help="override the tuned margin")
     args = ap.parse_args()
     cfg = load_config(args.config)
-    _, test, meta = load_preds(cfg, args.run)
-    write_submission(cfg, test, args.run, meta.get("classes"), Path(args.out) if args.out else None)
+    meta = json.loads((run_dir(cfg, args.run) / "meta.json").read_text(encoding="utf-8"))
+    t = args.threshold if args.threshold is not None else meta["decision"]["threshold"]
+    m = args.margin if args.margin is not None else meta["decision"]["margin"]
+
+    prob = predict_test(cfg, args.run)
+    cands = pd.read_parquet(pruned_path(cfg, "test"), columns=["s1", "rec"])
+    s1, rec = cands["s1"].to_numpy(np.int64), cands["rec"].to_numpy(np.int64)
+    s1_ids = pd.read_parquet(records_path(cfg, "test", "s1"), columns=["entity_id"])["entity_id"].to_numpy(object)
+    rec_ids = pd.read_parquet(records_path(cfg, "test", "s23"), columns=["entity_id"])["entity_id"].to_numpy(object)
+    keep = select(rec, prob, t, m)
+    log.info("threshold=%.2f margin=%.2f -> %s matches", t, m, f"{keep.sum():,}")
+
+    out = resolve(cfg["paths"]["output_dir"])
+    with timer("write outputs", log):
+        write_pairs_as_lists(out / "matching_results.tsv", MATCHING_HEADER, s1_ids, rec_ids, s1[keep], rec[keep])
+        write_pairs_as_lists(out / "candidate_pairs.tsv", CANDIDATE_HEADER, s1_ids, rec_ids, s1, rec)
+    ok = validate(cfg, out / "matching_results.tsv", out / "candidate_pairs.tsv")
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

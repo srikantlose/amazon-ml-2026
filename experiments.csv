@@ -1,1 +1,2 @@
 timestamp,run_id,owner,model,features,cv_score,lb_score,notes
+2026-09-25T03:23:22,lgb_v1_0925_032005,user,lightgbm,72 features,0.98031,,"t=0.65 m=0.2 {'f05_India': 0.9778019709611492, 'f05_US': 0.981985501047885}"

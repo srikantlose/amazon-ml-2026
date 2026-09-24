@@ -1,24 +1,22 @@
-# data and generated artifacts
-data/raw/*
-data/images/*
-data/cache/*
-!data/**/.gitkeep
-submissions/*.csv
+# competition data (organizers' folder) and everything derived from it
+student_resource/
+data/
+output/
+submissions/*/*.tsv
+*.zip
+
+# generated artifacts
 *.npy
 *.parquet
 *.pt
 *.pth
-*.ckpt
-*.cbm
+*.txt.model
 catboost_info/
 logs/
-*.zip
 
 # envs / tooling
 .venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-.kaggle/
-kaggle.json
 .DS_Store
