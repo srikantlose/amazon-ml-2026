@@ -37,6 +37,19 @@ def select(rec: np.ndarray, prob: np.ndarray, threshold: float, margin: float,
     return keep
 
 
+def select_per_pair(rec: np.ndarray, prob: np.ndarray, threshold: np.ndarray, margin: np.ndarray) -> np.ndarray:
+    """Like select(), but the threshold/margin can differ per pair (read at each record's best pair).
+
+    Used to be stricter for country labels never seen in training: leave-one-country-out runs
+    showed the best threshold for an unseen country is higher than the in-distribution one.
+    """
+    best, second = best_per_record(rec, prob)
+    ok = (prob[best] >= threshold[best]) & (prob[best] - second >= margin[best])
+    keep = np.zeros(len(prob), dtype=bool)
+    keep[best[ok]] = True
+    return keep
+
+
 def tune(s1: np.ndarray, rec: np.ndarray, prob: np.ndarray, true_s1: np.ndarray, n_true: np.ndarray,
          thresholds, margins, groups: dict | None = None) -> tuple[dict, pd.DataFrame]:
     """Grid search; returns the best {threshold, margin, score} and the full table.

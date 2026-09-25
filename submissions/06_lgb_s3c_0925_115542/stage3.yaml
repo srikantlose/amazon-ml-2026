@@ -1,0 +1,10 @@
+# Stage-3 matcher: base features + context from a stage-2 run (src/refine.py), more training data.
+model:
+  train_frac: 0.75
+  valid_frac: 0.02
+  lightgbm:
+    learning_rate: 0.05
+    n_estimators: 6000
+decision:
+  thresholds: [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75]
+  margins: [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]

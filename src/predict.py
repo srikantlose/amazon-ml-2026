@@ -17,7 +17,7 @@ import pandas as pd
 
 from src.blocking import pruned_path
 from src.data import CANDIDATE_HEADER, MATCHING_HEADER
-from src.decide import select
+from src.decide import select_per_pair
 from src.features import features_dir, load_part
 from src.normalize import records_path
 from src.train_matcher import run_dir
@@ -66,18 +66,33 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--threshold", type=float, help="override the tuned threshold")
     ap.add_argument("--margin", type=float, help="override the tuned margin")
+    ap.add_argument("--reuse-probs", action="store_true",
+                    help="use the run's saved test_prob.npy instead of re-scoring (decision changes only)")
     args = ap.parse_args()
     cfg = load_config(args.config)
     meta = json.loads((run_dir(cfg, args.run) / "meta.json").read_text(encoding="utf-8"))
     t = args.threshold if args.threshold is not None else meta["decision"]["threshold"]
     m = args.margin if args.margin is not None else meta["decision"]["margin"]
 
-    prob = predict_test(cfg, args.run)
+    saved = run_dir(cfg, args.run) / "test_prob.npy"
+    prob = np.load(saved) if args.reuse_probs and saved.exists() else predict_test(cfg, args.run)
     cands = pd.read_parquet(pruned_path(cfg, "test"), columns=["s1", "rec"])
     s1, rec = cands["s1"].to_numpy(np.int64), cands["rec"].to_numpy(np.int64)
-    s1_ids = pd.read_parquet(records_path(cfg, "test", "s1"), columns=["entity_id"])["entity_id"].to_numpy(object)
+    s1_test = pd.read_parquet(records_path(cfg, "test", "s1"), columns=["entity_id", "country"])
+    s1_ids = s1_test["entity_id"].to_numpy(object)
     rec_ids = pd.read_parquet(records_path(cfg, "test", "s23"), columns=["entity_id"])["entity_id"].to_numpy(object)
-    keep = select(rec, prob, t, m)
+    thr, mar = np.full(len(prob), t, np.float32), np.full(len(prob), m, np.float32)
+    unseen_cfg = cfg["decision"].get("unseen_country")
+    if unseen_cfg:
+        seen = set(pd.read_parquet(records_path(cfg, "train", "s1"), columns=["country"])["country"].unique())
+        unseen_s1 = ~np.isin(s1_test["country"].to_numpy(), list(seen))
+        unseen_pair = unseen_s1[s1]
+        thr[unseen_pair] = unseen_cfg["threshold"]
+        mar[unseen_pair] = unseen_cfg["margin"]
+        log.info("country labels not seen in training: %s (%s S1) -> threshold=%.2f margin=%.2f",
+                 sorted(set(s1_test["country"][unseen_s1])), f"{unseen_s1.sum():,}", unseen_cfg["threshold"],
+                 unseen_cfg["margin"])
+    keep = select_per_pair(rec, prob, thr, mar)
     log.info("threshold=%.2f margin=%.2f -> %s matches", t, m, f"{keep.sum():,}")
 
     out = resolve(cfg["paths"]["output_dir"])
