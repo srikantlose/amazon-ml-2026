@@ -190,7 +190,23 @@ python -m src.run_pipeline --config configs/base.yaml
 ```
 It regenerates `output/matching_results.tsv` and `output/candidate_pairs.tsv` (~5 h on a 12-thread CPU, 31 GB RAM and an RTX 4060). Each stage can also be run on its own (see README).
 
+**Reproducibility:**
+- `python -m src.run_pipeline` was run from empty caches on the raw TSVs: 4 h 05 min on the hardware above.
+- Stage-2 OOF 0.98443 (original 0.98444), stage-3 OOF 0.98596 (original 0.98601).
+- Its test predictions agree with the original submission on 99.2% of predicted pairs (97.4% of S1 rows identical). The residual differences come from fp16 ties in GPU retrieval and multi-threaded tree training.
+
 ### B. Additional Results
+- **France (unseen country) diagnosis on test:**
+  - Among pairs the pruning ranker is confident about, French names agree as well as US/Indian ones (name ratio 89.9 vs 87.6–89.2), but French addresses agree much less:
+
+    | Confident pairs | France | US / India |
+    |---|---|---|
+    | Char address cosine | 0.805 | 0.92 / 0.90 |
+    | Address ratio | 77.5 | 85.2 / 81.8 |
+
+  - Cause: S1 always writes the region (`Hauts-de-France`), S2/S3 often the department (`Nord`), just as S3 spells out US state names that S1 abbreviates.
+  - Fix: departments map to their region code during normalization, as state names already do.
+  - Public leaderboard confirms France is where the gap to train OOF lies: raising only France's threshold from 0.65 to 0.75 improved the public score from 0.974431 to 0.974962.
 - **Leave-one-country-out (proxy for the unseen France label):** a stage-2 model trained on one country only is scored on the other (`src/loco.py`).
 
   | Setting | US → India | India → US |
