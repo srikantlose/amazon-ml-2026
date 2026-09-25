@@ -41,6 +41,27 @@
 | lgb_sib_0925_040217 (sub-02) | + sibling features (similarity to the S1's confident stage-1 records) | 0.9795 | 0.98279 (US 0.9840, IN 0.9810) | |
 | lgb_v3_0925_044935 | + name uniqueness (S1 name frequency), state agreement (first/last alphabetic token), name ambiguity within record | 0.9795 | 0.98298 (US 0.9841, IN 0.9812) | |
 
+| lgb_s3_0925_052339 (sub-03) | stage 3: + context from stage-2 OOF probabilities (ranks/gaps/margins, S1 linked counts, p2 siblings), 75% S1 groups | 0.9795 | 0.98495 (US 0.9861, IN 0.9832) | |
+| lgb_s2b_0925_081848 | stage 2 on blocking v2 (char full k=30 + brand-token/house key) | 0.9826 | 0.98406 | |
+| lgb_s3b_0925_085328 (sub-04) | stage 3 on blocking v2 | 0.9826 | 0.98589 (US 0.9863, IN 0.9853) | |
+
+## Blocking v2 (25 Sep, 06:00-07:00)
+- Char full view k 10 → 30, new exact (first name token, house number) key (cap 50 S1 per key).
+- Union: 439.8M train pairs, recall 0.9823 → 0.9879, oracle 0.9944 → 0.9963; house key alone recall 0.534.
+- After pruning (top 5, p ≥ 0.001): 12.6M pairs, recall 0.9795 → 0.9826; pruning now costs 0.53 pt (top 8 would keep 0.9840).
+- Runtime: blocking 64 min, pruning 75 min (group stats over 440M pairs dominate), rest ~70 min.
+
+## Pruning v2 (25 Sep, 09:40-10:40)
+- Stage-1 ranker + three rapidfuzz features (core-name ratio, address token-set, digit-token overlap); stage-1 probabilities of all pairs saved.
+- Recall on 440M-pair union (0.9879 before pruning), train OOF:
+  top 3: 0.9809 · top 5: 0.9830 (v1 ranker 0.9826) · top 8: 0.9843 · top 10: 0.9849 · top 12: 0.9852 (all p ≥ 0.001).
+- String features add little (+0.04 pt at top 5); most of the gain is keeping 8 candidates (12.37M pairs, 1.20/record).
+- Runtime: group stats 20 min, 4 ranker fits 10 min, OOF scoring with string features 22 min.
+
+## Test-set composition
+- Test has 5.75 records per S1 vs 4.68 in train while predicted matches per S1 stay ~3.4 → ~39% distractor records in test vs 26% in train.
+- Simulating 1.9x distractor false positives on OOF moves the best threshold 0.60 → 0.70 but changes F0.5 by only 0.0001; cost of the extra distractors ≈ 0.001.
+
 ## Error analysis after sub-02 (OOF)
 - False negatives: 55% have an empty record address (vs 3.3% of all true pairs); probabilities spread 0.1–0.6.
 - False positives: similar names in another city/state; wrong S1 chosen when the true S1 was pruned away.

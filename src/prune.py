@@ -21,12 +21,13 @@ import json
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from rapidfuzz import fuzz, process
 
 from src.blocking import VIEW_BITS, candidates_path, pruned_path
 from src.data import build_labels
 from src.features import _group_stats, country_segments
 from src.metrics import blocking_report
-from src.normalize import load_records
+from src.normalize import records_path
 from src.train_matcher import s1_hash
 from src.utils import add_config_arg, cache_dir, get_logger, load_config, seed_everything, timer
 
@@ -74,7 +75,17 @@ def group_stats(cands: pd.DataFrame, s1_country: np.ndarray) -> dict:
     return out
 
 
-def assemble(cands: pd.DataFrame, stats: dict, s23: pd.DataFrame, rows: np.ndarray) -> pd.DataFrame:
+TEXT_FIELDS = ("name_core", "addr_n", "addr_nums")
+
+
+def text_arrays(s1_df: pd.DataFrame, s23_df: pd.DataFrame) -> dict:
+    """Object arrays of the fields used for the cheap string similarities."""
+    return {(side, c): df[c].to_numpy(dtype=object) for side, df in (("s1", s1_df), ("rec", s23_df))
+            for c in TEXT_FIELDS}
+
+
+def assemble(cands: pd.DataFrame, stats: dict, s23: pd.DataFrame, rows: np.ndarray, text: dict | None = None
+             ) -> pd.DataFrame:
     f = {}
     for c in ("cos_name", "cos_addr", "tcos_name", "tcos_addr", "cos_full", "tcos_full"):
         f[c] = _score(cands, c, rows)
@@ -87,15 +98,25 @@ def assemble(cands: pd.DataFrame, stats: dict, s23: pd.DataFrame, rows: np.ndarr
     rec = cands["rec"].to_numpy(np.int64)[rows]
     f["r_addr_empty"] = s23["addr_empty"].to_numpy(np.float32)[rec]
     f["r_non_latin"] = s23["name_non_latin"].to_numpy(np.float32)[rec]
+    if text is not None:
+        # exact string similarities are cheap even at this scale and sharpen the ranking a lot
+        s1 = cands["s1"].to_numpy(np.int64)[rows]
+        cp = lambda c, scorer: process.cpdist(text[("s1", c)][s1], text[("rec", c)][rec], scorer=scorer,
+                                              workers=-1, dtype=np.uint8).astype(np.float32)
+        f["x_name_ratio"] = cp("name_core", fuzz.ratio)
+        f["x_addr_tset"] = cp("addr_n", fuzz.token_set_ratio)
+        nums = cp("addr_nums", fuzz.token_set_ratio)
+        both = (text[("s1", "addr_nums")][s1] != "") & (text[("rec", "addr_nums")][rec] != "")
+        f["x_num_tset"] = np.where(both, nums, np.nan).astype(np.float32)
     return pd.DataFrame(f)
 
 
-def predict_chunked(boosters, cands, stats, s23, rows_by_model=None) -> np.ndarray:
+def predict_chunked(boosters, cands, stats, s23, rows_by_model=None, text: dict | None = None) -> np.ndarray:
     """rows_by_model: optional per-pair model index (OOF); otherwise average all models."""
     prob = np.zeros(len(cands), np.float32)
     for s in range(0, len(cands), CHUNK):
         rows = np.arange(s, min(s + CHUNK, len(cands)))
-        X = assemble(cands, stats, s23, rows)
+        X = assemble(cands, stats, s23, rows, text)
         if rows_by_model is None:
             prob[rows] = np.mean([b.predict(X) for b in boosters], axis=0)
         else:
@@ -117,8 +138,10 @@ def train(cfg: dict) -> None:
     pcfg = cfg["prune"]
     mdir = cache_dir(cfg, "prune")
     cands = pd.read_parquet(candidates_path(cfg, "train"))
-    s1_rec = load_records(cfg, "train", "s1")
-    s23 = load_records(cfg, "train", "s23")[["entity_id", "addr_empty", "name_non_latin"]]
+    s1_rec = pd.read_parquet(records_path(cfg, "train", "s1"), columns=["entity_id", "country", *TEXT_FIELDS])
+    s23 = pd.read_parquet(records_path(cfg, "train", "s23"),
+                          columns=["entity_id", "addr_empty", "name_non_latin", *TEXT_FIELDS])
+    text = text_arrays(s1_rec, s23)
     true_s1, n_true = build_labels(cfg, s1_rec["entity_id"].to_numpy(), s23["entity_id"].to_numpy())
     s1 = cands["s1"].to_numpy(np.int64)
     rec = cands["rec"].to_numpy(np.int64)
@@ -134,7 +157,7 @@ def train(cfg: dict) -> None:
         tr = np.flatnonzero((fold != f) & (u < pcfg["train_frac"]))
         with timer(f"stage-1 fold {f} on {len(tr):,} pairs", log):
             m = lgb.LGBMClassifier(**PARAMS, random_state=cfg["seed"] + f, n_jobs=-1)
-            m.fit(assemble(cands, stats, s23, tr), y[tr])
+            m.fit(assemble(cands, stats, s23, tr, text), y[tr])
             m.booster_.save_model(str(mdir / f"stage1_fold{f}.txt"))
             boosters.append(m.booster_)
     # one model on the sampled S1 groups of all folds scores the test set (a third of the cost of
@@ -142,17 +165,18 @@ def train(cfg: dict) -> None:
     tr_all = np.flatnonzero(u < pcfg["train_frac"])
     with timer(f"stage-1 full model on {len(tr_all):,} pairs", log):
         m = lgb.LGBMClassifier(**PARAMS, random_state=cfg["seed"], n_jobs=-1)
-        m.fit(assemble(cands, stats, s23, tr_all), y[tr_all])
+        m.fit(assemble(cands, stats, s23, tr_all, text), y[tr_all])
         m.booster_.save_model(str(mdir / "stage1_full.txt"))
     with timer("stage-1 OOF prediction", log):
-        oof = predict_chunked(boosters, cands, stats, s23, rows_by_model=fold)
-    del stats
+        oof = predict_chunked(boosters, cands, stats, s23, rows_by_model=fold, text=text)
+    np.save(mdir / "stage1_oof_train.npy", oof)   # all pairs, so pruning settings can change cheaply
+    del stats, text
     full = blocking_report(len(s1_rec), true_s1, n_true, s1, rec)
     log.info("before pruning: recall %.4f oracle %.4f pairs %s", full["pair_recall"], full["oracle_f05"],
              f"{full['pairs']:,}")
     rank = _group_stats(rec, oof)[0]
-    for top_n in (3, 4, 5, 6, 8):
-        for min_prob in (0.001, 0.01):
+    for top_n in (3, 5, 8, 10, 12):
+        for min_prob in (0.0005, 0.001, 0.01):
             k = keep_mask(rec, oof, top_n, min_prob, rank)
             r = blocking_report(len(s1_rec), true_s1, n_true, s1[k], rec[k])
             log.info("top_n=%d min_prob=%.3f: recall %.4f oracle %.4f pairs %s (%.2f/record)", top_n, min_prob,
@@ -171,16 +195,19 @@ def apply_test(cfg: dict) -> None:
     pcfg = cfg["prune"]
     mdir = cache_dir(cfg, "prune")
     cands = pd.read_parquet(candidates_path(cfg, "test"))
-    s23 = load_records(cfg, "test", "s23")[["entity_id", "addr_empty", "name_non_latin"]]
-    s1_country = load_records(cfg, "test", "s1")["country"].to_numpy()
+    s1_rec = pd.read_parquet(records_path(cfg, "test", "s1"), columns=["entity_id", "country", *TEXT_FIELDS])
+    s23 = pd.read_parquet(records_path(cfg, "test", "s23"),
+                          columns=["entity_id", "addr_empty", "name_non_latin", *TEXT_FIELDS])
+    text = text_arrays(s1_rec, s23)
     with timer(f"group stats over {len(cands):,} pairs", log):
-        stats = group_stats(cands, s1_country)
+        stats = group_stats(cands, s1_rec["country"].to_numpy())
     full = mdir / "stage1_full.txt"
     boosters = ([lgb.Booster(model_file=str(full))] if full.exists()
                 else [lgb.Booster(model_file=str(p)) for p in sorted(mdir.glob("stage1_fold*.txt"))])
     with timer(f"stage-1 test prediction ({len(boosters)} model(s))", log):
-        prob = predict_chunked(boosters, cands, stats, s23)
-    del stats
+        prob = predict_chunked(boosters, cands, stats, s23, text=text)
+    np.save(mdir / "stage1_prob_test.npy", prob)
+    del stats, text
     k = keep_mask(cands["rec"].to_numpy(np.int64), prob, pcfg["top_n"], pcfg["min_prob"])
     out = cands[k].reset_index(drop=True)
     out["p1"] = prob[k]

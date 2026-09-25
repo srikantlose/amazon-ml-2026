@@ -6,3 +6,6 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T05:44:35,lgb_s3_0925_052339,user,lightgbm,96 features,0.98495,,"t=0.65 m=0.5 {'f05_India': 0.983180898782892, 'f05_US': 0.9861362155358412} stage-3: v3 features + p2 context from lgb_v3_0925_044935, train_frac 0.75"
 2026-09-25T08:36:18,lgb_s2b_0925_081848,user,lightgbm,83 features,0.98406,,"t=0.6 m=0.4 {'f05_India': 0.9833371069404933, 'f05_US': 0.9845474912898484} blocking v2 (full k=30 + house key)"
 2026-09-25T09:13:53,lgb_s3b_0925_085328,user,lightgbm,97 features,0.98589,,"t=0.65 m=0.5 {'f05_India': 0.9853152287023654, 'f05_US': 0.9862722472528266} blocking v2 + stage-3 from lgb_s2b_0925_081848"
+2026-09-25T09:38:16,lgb_s4_0925_092515,user,lightgbm,97 features,0.98576,,"t=0.65 m=0.6 {'f05_India': 0.9851599938486211, 'f05_US': 0.9861600443206372} stage-4: context from stage-3 run lgb_s3b_0925_085328"
+2026-09-25T11:39:37,lgb_s2c_0925_112321,user,lightgbm,83 features,0.98444,,"t=0.6 m=0.5 {'f05_India': 0.9835971801503524, 'f05_US': 0.9850042656744695} prune v2: string features, top_n 8"
+2026-09-25T12:14:38,lgb_s3c_0925_115542,user,lightgbm,97 features,0.98601,,"t=0.65 m=0.6 {'f05_India': 0.9853397746206582, 'f05_US': 0.9864524162991707} prune v2 + stage-3 from lgb_s2c_0925_112321"
