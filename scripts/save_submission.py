@@ -4,8 +4,8 @@
     python scripts/save_submission.py --run <run_id> --note "..." --no-git
 
 Creates submissions/NN_<run_id>/ with both TSVs (gitignored, kept locally for version history),
-the run's meta.json, the config used and a short note, then commits the code state and tags it
-sub-NN so every leaderboard upload maps to an exact commit.
+the run's meta.json, the config used and a short note, then commits the code state, tags it
+sub-NN so every leaderboard upload maps to an exact commit, and pushes both to origin.
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--note", required=True)
     ap.add_argument("--no-git", action="store_true")
+    ap.add_argument("--no-push", action="store_true", help="commit and tag locally only")
     args = ap.parse_args()
     cfg = load_config(args.config)
 
@@ -55,10 +56,19 @@ def main():
 
     if not args.no_git:
         msg = f"Submission {n:02d}: {args.note} (OOF F0.5 {score:.4f})"
+        tag = f"sub-{n:02d}"
         subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
         subprocess.run(["git", "commit", "-q", "-m", msg], cwd=ROOT, check=True)
-        subprocess.run(["git", "tag", f"sub-{n:02d}"], cwd=ROOT, check=True)
-        print(f"committed and tagged sub-{n:02d}")
+        subprocess.run(["git", "tag", tag], cwd=ROOT, check=True)
+        print(f"committed and tagged {tag}")
+        if not args.no_push:
+            # back up to the team's remote; a failed push leaves the local commit/tag intact
+            branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT, check=True,
+                                    capture_output=True, text=True).stdout.strip()
+            pushed = all(subprocess.run(["git", "push", "-q", "origin", ref], cwd=ROOT).returncode == 0
+                         for ref in (branch, tag))
+            print(f"pushed {branch} and {tag} to origin" if pushed
+                  else "WARNING: push failed; commit and tag are saved locally, run `git push origin --tags` later")
 
 
 if __name__ == "__main__":
