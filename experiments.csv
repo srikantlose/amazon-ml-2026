@@ -15,3 +15,7 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T14:43:14,lgb_s2d_0925_142555,user,lightgbm,87 features,0.98470,,"t=0.6 m=0.5 {'f05_India': 0.983859526383845, 'f05_US': 0.9852688521304978} + country-frequent-token (rare) address/name similarities"
 2026-09-25T18:16:28,lgb_stage2_0925_175903,user,lightgbm,83 features,0.98443,,"t=0.6 m=0.5 {'f05_India': 0.9835806966346458, 'f05_US': 0.9850018071732526}"
 2026-09-25T18:52:38,lgb_stage3_0925_183300,user,lightgbm,97 features,0.98596,,"t=0.65 m=0.5 {'f05_India': 0.9852351811580085, 'f05_US': 0.9864455614682682}"
+2026-09-26T02:33:50,lgb_stage2_0926_021300,user,lightgbm,83 features,0.98509,,"t=0.6 m=0.5 {'f05_India': 0.9843223403186371, 'f05_US': 0.9855948764903689}"
+2026-09-26T03:16:22,lgb_stage2la_0926_023743,user,lightgbm,96 features,0.98619,,"t=0.6 m=0.5 {'f05_India': 0.9858286668762823, 'f05_US': 0.9864346930808238}"
+2026-09-26T03:35:01,lgb_stage3_0926_025245,user,lightgbm,97 features,0.98646,,"t=0.65 m=0.6 {'f05_India': 0.9859295107090716, 'f05_US': 0.9868161061026977}"
+2026-09-26T03:54:55,lgb_stage3la_0926_033632,user,lightgbm,110 features,0.98741,,"t=0.65 m=0.6 {'f05_India': 0.9871296943974058, 'f05_US': 0.9876025568725121}"
