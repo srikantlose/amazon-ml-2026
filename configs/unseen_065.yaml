@@ -1,0 +1,5 @@
+# France (unseen country label): same threshold as the training countries, for leaderboard comparison.
+decision:
+  unseen_country:
+    threshold: 0.65
+    margin: 0.5
