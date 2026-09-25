@@ -300,9 +300,12 @@ def build(cfg: dict, split: str) -> None:
     with timer("record arrays", log):
         A, B = record_arrays(s1), record_arrays(s23)
         A["name_freq"], B["name_freq"] = name_frequency(s1, s23)
-    with timer("country-frequent token removal", log):
-        A["addr_rare"], B["addr_rare"] = drop_common_tokens(s1, s23, "addr_n")
-        A["name_rare"], B["name_rare"] = drop_common_tokens(s1, s23, "name_core")
+    if cfg["features"].get("rare_tokens", False):
+        # off by default: +0.0003 OOF F0.5 in-distribution, but worse transfer to an unseen
+        # country in leave-one-country-out runs (US->India 0.9488 -> 0.9454)
+        with timer("country-frequent token removal", log):
+            A["addr_rare"], B["addr_rare"] = drop_common_tokens(s1, s23, "addr_n")
+            A["name_rare"], B["name_rare"] = drop_common_tokens(s1, s23, "name_core")
     with timer("group features", log):
         grp = group_features(cands, s1["country"].to_numpy())
     with timer("sibling + name ambiguity features", log):

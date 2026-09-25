@@ -44,6 +44,7 @@ prune:                                    # stage-1 ranker over retrieval scores
 
 features:
   chunk_pairs: 5000000
+  rare_tokens: false                      # country-frequent-token similarities; see src/features.py
 
 model:
   n_folds: 3

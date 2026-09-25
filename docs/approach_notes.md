@@ -79,3 +79,8 @@
 ## Error analysis after sub-02 (OOF)
 - False negatives: 55% have an empty record address (vs 3.3% of all true pairs); probabilities spread 0.1–0.6.
 - False positives: similar names in another city/state; wrong S1 chosen when the true S1 was pruned away.
+
+## Country-frequent-token features (25 Sep, 14:10-15:00) — not used
+- Address/name similarities after removing tokens found in >1% of the country's records (admin areas, generic words).
+- Stage-2 OOF 0.98444 → 0.98470, but leave-one-country-out US→India 0.9488 → 0.9454 (India→US 0.9643 → 0.9645).
+- Worse transfer to an unseen country outweighs the small in-distribution gain (France = 15% of test). Kept behind `features.rare_tokens: false`.

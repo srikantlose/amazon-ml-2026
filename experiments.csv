@@ -12,3 +12,4 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T13:14:54,lgb_s3c_b_0925_125721,user,lightgbm,97 features,0.98601,,"t=0.65 m=0.5 {'f05_India': 0.9853148667631502, 'f05_US': 0.9864740948963471} stage-3 ensemble member b"
 2026-09-25T13:51:18,lgb_s3c_c_0925_131457,user,lightgbm,97 features,0.98599,,"t=0.65 m=0.5 {'f05_India': 0.985307785227872, 'f05_US': 0.9864466539565805} stage-3 ensemble member c"
 2026-09-25T14:09:49,ens3_0925_140949,user,ensemble,lgb_s3c_0925_115542+lgb_s3c_b_0925_125721+lgb_s3c_c_0925_131457,0.98605,,"t=0.65 m=0.5 {'f05_India': 0.9853704328262736, 'f05_US': 0.9865081770320767}"
+2026-09-25T14:43:14,lgb_s2d_0925_142555,user,lightgbm,87 features,0.98470,,"t=0.6 m=0.5 {'f05_India': 0.983859526383845, 'f05_US': 0.9852688521304978} + country-frequent-token (rare) address/name similarities"
