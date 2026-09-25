@@ -5,3 +5,5 @@
 - OOF macro F0.5: 0.98741 (threshold 0.65, margin 0.6)
 - per country: {'f05_India': 0.9871296943974058, 'f05_US': 0.9876025568725121}
 - public LB: (fill in after upload)
+- caveat (04:30): on France this model drops ~28K non-swap pairs, many of them true filler additions; see
+  submission 14, which keeps these rows for US/India only

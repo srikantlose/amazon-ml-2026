@@ -102,6 +102,24 @@
   rare by the per-country S2/S3-vs-S1 frequency ratio, swap flag, swap similarity, shared initial, word length),
   statistics from each split's own names, no labels. Used as an extra feature folder for stages 2 and 3.
 
+## Rebuild with number canonicalization + look-alike features (26 Sep, 23:09-04:05)
+| run | change | OOF F0.5 | US | India |
+|---|---|---|---|---|
+| lgb_stage2_0926_021300 | stage 2, house numbers canonicalized (leading zeros, No/N° prefixes, 9B = 9 bis) | 0.98509 | | |
+| lgb_stage3_0926_025245 | stage 3 of the above | 0.98646 | 0.98682 | 0.98593 |
+| lgb_stage2la_0926_023743 | stage 2 + look-alike columns + candidate count relative to split/country (raw s1_n_cands dropped) | 0.98619 | 0.98643 | 0.98583 |
+| lgb_stage3la_0926_033632 (sub-13) | stage 3 of the above | 0.98741 | 0.98760 | 0.98713 |
+- Candidates per S1 are 5.42 (US) / 5.72 (India) in train and 6.36 / 6.91 / 7.47 (France) in test: test has more
+  distractor records. A stage-2 model re-scored with s1_n_cands raised 22% accepted ~25-30% more false pairs, so
+  the raw count is replaced by count / mean count of the split and country (`src/relcounts.py`).
+- Accepted swap-to-ordinary-word pairs on test, rebuild vs look-alike model: US 3,498 → 90, India 7,868 → 92,
+  France (t=0.65) 33,452 → 655. Pairs per S1 on test move toward the OOF level (US 3.42 → 3.39, OOF 3.36).
+- Post-filter (`src/postfilter.py`, drop accepted swap pairs): +0.00027 OOF on the stage-2 rebuild, +0.0002 on its
+  stage 3; no gain with the look-alike columns (the few swap pairs that model still accepts are 98% correct).
+- France pairs the look-alike model scores 0.65-0.95 (read 45): mostly trade-name aliases at the same address,
+  empty addresses, filler additions and garbled names; the doubtful ones are same-name records at another house
+  number or street. The 0.95 France threshold is no longer needed; submission 13 uses 0.85.
+
 ## Country-frequent-token features (25 Sep, 14:10-15:00) — not used
 - Address/name similarities after removing tokens found in >1% of the country's records (admin areas, generic words).
 - Stage-2 OOF 0.98444 → 0.98470, but leave-one-country-out US→India 0.9488 → 0.9454 (India→US 0.9643 → 0.9645).
