@@ -4,4 +4,4 @@
 - note: clean pipeline models + French normalization, France threshold 0.65 (same as training countries)
 - OOF macro F0.5: 0.98596 (threshold 0.65, margin 0.5)
 - per country: {'f05_India': 0.9852351811580085, 'f05_US': 0.9864455614682682}
-- public LB: (fill in after upload)
+- public LB: not uploaded (08 showed stricter France thresholds help; slot used for 0.95 instead)
