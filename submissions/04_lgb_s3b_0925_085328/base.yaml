@@ -1,0 +1,67 @@
+# Business entity resolution pipeline config. Relative paths resolve against the repo root.
+# Overlay experiments with a second file: --config configs/base.yaml configs/my_exp.yaml
+
+seed: 42
+data_dir: student_resource/dataset        # contains train/ and test/ as shipped by the organizers
+
+paths:
+  cache_dir: data/cache                   # per-split stage outputs (records, vectors, candidates, features)
+  output_dir: output                      # matching_results.tsv + candidate_pairs.tsv
+  submissions_dir: submissions
+  experiments_csv: experiments.csv
+  validator: student_resource/utils/validate_submission.py
+
+normalize:
+  workers: 12
+  chunk_size: 200000
+  learned_map_min_count: 5                # non-Latin token must be seen this often in train pairs
+  learned_map_min_share: 0.5              # and map to the same Latin token this often
+
+blocking:
+  svd_dim: 256                            # dims per field (name, address) for GPU retrieval
+  svd_fit_rows: 1000000                   # sample used to fit TF-IDF IDF + SVD per split
+  workers: 12
+  query_batch: 512
+  views:                                  # each S2/S3 record -> top-k S1 of the same country label
+    full: 30                              # char 3-gram SVD, GPU: 0.5 * cos(name) + 0.5 * cos(address)
+    name: 0
+    addr: 0
+    tfull: 10                             # word-token TF-IDF (exact, CPU): cos(name tokens) + cos(address tokens)
+    tname: 5
+    taddr: 5
+  token_max_df: 2000                      # tokens in more S1 records than this are left out of the index
+  token_workers: 12                       # each worker holds the index plus a chunk of sparse products (~1 GB)
+  token_chunk: 5000
+  token_min_score: 0.02                   # ignore near-zero token overlaps when ranking
+  name_key_max_group: 20                  # exact name_core join, skipped for very common names
+  house_key_max_group: 50                 # exact (first name token, house number) join
+  sample_frac: 1.0                        # <1.0 for recall experiments on a query subsample
+
+prune:                                    # stage-1 ranker over retrieval scores (src/prune.py)
+  top_n: 5                                # S1 candidates kept per S2/S3 record
+  min_prob: 0.001
+  train_frac: 0.05                        # share of S1 groups used to fit each fold's ranker
+
+features:
+  chunk_pairs: 5000000
+
+model:
+  n_folds: 3
+  train_frac: 0.10                        # share of S1 groups (per fold's training side) used to fit
+  valid_frac: 0.02                        # early-stopping slice, disjoint S1 groups
+  lightgbm:
+    objective: binary
+    learning_rate: 0.08
+    num_leaves: 127
+    min_child_samples: 100
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 1.0
+    n_estimators: 3000
+    verbose: -1
+  early_stopping_rounds: 100
+
+decision:
+  thresholds: [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8]
+  margins: [0.0, 0.05, 0.1, 0.2]

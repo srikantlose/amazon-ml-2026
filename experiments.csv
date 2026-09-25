@@ -4,3 +4,5 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T04:26:55,lgb_sib_0925_040217,user,lightgbm,76 features,0.98279,,"t=0.6 m=0.5 {'f05_India': 0.980966638301724, 'f05_US': 0.9839995708989735} bigtrain + sibling features"
 2026-09-25T05:05:31,lgb_v3_0925_044935,user,lightgbm,82 features,0.98298,,"t=0.6 m=0.5 {'f05_India': 0.9812387476016323, 'f05_US': 0.9841341134460942} sibling + name frequency + state + name ambiguity"
 2026-09-25T05:44:35,lgb_s3_0925_052339,user,lightgbm,96 features,0.98495,,"t=0.65 m=0.5 {'f05_India': 0.983180898782892, 'f05_US': 0.9861362155358412} stage-3: v3 features + p2 context from lgb_v3_0925_044935, train_frac 0.75"
+2026-09-25T08:36:18,lgb_s2b_0925_081848,user,lightgbm,83 features,0.98406,,"t=0.6 m=0.4 {'f05_India': 0.9833371069404933, 'f05_US': 0.9845474912898484} blocking v2 (full k=30 + house key)"
+2026-09-25T09:13:53,lgb_s3b_0925_085328,user,lightgbm,97 features,0.98589,,"t=0.65 m=0.5 {'f05_India': 0.9853152287023654, 'f05_US': 0.9862722472528266} blocking v2 + stage-3 from lgb_s2b_0925_081848"
