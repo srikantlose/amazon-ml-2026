@@ -1,0 +1,5 @@
+# France (unseen country label): very strict decision, for leaderboard comparison.
+decision:
+  unseen_country:
+    threshold: 0.95
+    margin: 0.5
