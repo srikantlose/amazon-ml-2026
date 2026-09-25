@@ -182,6 +182,38 @@ def name_frequency(s1_df: pd.DataFrame, rec_df: pd.DataFrame) -> tuple[np.ndarra
     return s1_freq.astype(np.float32), rec_freq.astype(np.float32)
 
 
+def drop_common_tokens(s1_df: pd.DataFrame, rec_df: pd.DataFrame, col: str, max_share: float = 0.01
+                       ) -> tuple[np.ndarray, np.ndarray]:
+    """Copies of `col` without the tokens found in more than `max_share` of the country's records.
+
+    Frequent tokens are mostly administrative areas and generic words (state codes, region and
+    department names, big cities, "pvt", "sarl", "de"). Sources write them inconsistently (a
+    department in one, the region in another), which adds noise to the similarity of the specific
+    parts (street, number, brand). Tokens with digits are always kept. Frequencies are computed
+    per country label on the split being processed, so an unseen label gets its own list.
+    """
+    both = pd.concat([s1_df[["country", col]], rec_df[["country", col]]], ignore_index=True)
+    toks = both[col].str.split()
+    lens = toks.str.len().to_numpy()
+    # document frequency: each token counted once per record
+    rec_tok = pd.DataFrame({"row": np.repeat(np.arange(len(both)), lens),
+                            "tok": np.concatenate(toks.to_numpy()) if lens.sum() else []}).drop_duplicates()
+    rec_tok["country"] = both["country"].to_numpy()[rec_tok["row"].to_numpy()]
+    dfreq = rec_tok.groupby(["country", "tok"]).size()
+    n_per_country = both["country"].value_counts()
+    share = dfreq / n_per_country.reindex(dfreq.index.get_level_values(0)).to_numpy()
+    common = {c: set(share[c][share[c] > max_share].index) for c in share.index.get_level_values(0).unique()}
+    del rec_tok, dfreq, share
+
+    def strip(df):
+        out = []
+        for country, text in zip(df["country"].to_numpy(), df[col].to_numpy()):
+            cs = common.get(country, set())
+            out.append(" ".join(t for t in text.split() if t not in cs or any(ch.isdigit() for ch in t)))
+        return np.array(out, dtype=object)
+    return strip(s1_df), strip(rec_df)
+
+
 def name_ambiguity(cands: pd.DataFrame, A: dict, B: dict) -> pd.DataFrame:
     """Within each record's candidates: rank/gap of core-name similarity and how many candidates
     have a near-identical name (several same-name S1 records -> the address must decide)."""
@@ -241,6 +273,13 @@ def pair_features(A: dict, B: dict, ia: np.ndarray, ib: np.ndarray) -> pd.DataFr
     f["rec_first_in_s1"] = _cp(bf, ac, fuzz.partial_ratio)
     # cross-field: trade-name records sometimes carry the location in the name
     f["x_name_addr"] = _cp(bn, aa, fuzz.partial_ratio)
+    # the specific parts only: country-frequent tokens (admin areas, generic words) removed
+    for tag, field in (("ar", "addr_rare"), ("nr", "name_rare")):
+        if field in A and field in B:
+            x, y = g(A, field, ia), g(B, field, ib)
+            both = (x != "") & (y != "")
+            f[f"{tag}_tset"] = np.where(both, _cp(x, y, fuzz.token_set_ratio), np.nan).astype(np.float32)
+            f[f"{tag}_ratio"] = np.where(both, _cp(x, y, fuzz.ratio), np.nan).astype(np.float32)
     for c in ("name_len", "addr_len", "name_ntok", "addr_ntok"):
         f[f"d_{c}"] = np.abs(A[c][ia] - B[c][ib])
         f[f"r_{c}"] = B[c][ib]
@@ -261,6 +300,9 @@ def build(cfg: dict, split: str) -> None:
     with timer("record arrays", log):
         A, B = record_arrays(s1), record_arrays(s23)
         A["name_freq"], B["name_freq"] = name_frequency(s1, s23)
+    with timer("country-frequent token removal", log):
+        A["addr_rare"], B["addr_rare"] = drop_common_tokens(s1, s23, "addr_n")
+        A["name_rare"], B["name_rare"] = drop_common_tokens(s1, s23, "name_core")
     with timer("group features", log):
         grp = group_features(cands, s1["country"].to_numpy())
     with timer("sibling + name ambiguity features", log):

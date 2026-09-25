@@ -9,3 +9,4 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-25T09:38:16,lgb_s4_0925_092515,user,lightgbm,97 features,0.98576,,"t=0.65 m=0.6 {'f05_India': 0.9851599938486211, 'f05_US': 0.9861600443206372} stage-4: context from stage-3 run lgb_s3b_0925_085328"
 2026-09-25T11:39:37,lgb_s2c_0925_112321,user,lightgbm,83 features,0.98444,,"t=0.6 m=0.5 {'f05_India': 0.9835971801503524, 'f05_US': 0.9850042656744695} prune v2: string features, top_n 8"
 2026-09-25T12:14:38,lgb_s3c_0925_115542,user,lightgbm,97 features,0.98601,,"t=0.65 m=0.6 {'f05_India': 0.9853397746206582, 'f05_US': 0.9864524162991707} prune v2 + stage-3 from lgb_s2c_0925_112321"
+2026-09-25T13:14:54,lgb_s3c_b_0925_125721,user,lightgbm,97 features,0.98601,,"t=0.65 m=0.5 {'f05_India': 0.9853148667631502, 'f05_US': 0.9864740948963471} stage-3 ensemble member b"

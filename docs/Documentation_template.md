@@ -126,8 +126,10 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 **Threshold selection method:**
 - Each record keeps only its highest-probability S1 (one-to-one assignment).
 - It is accepted if p ≥ t and p − p_runner-up ≥ m.
-- (t, m) are grid-searched to maximize the exact macro F0.5 over all 2.2M training S1 entities, using out-of-fold probabilities, singletons and blocking misses included. Final t = 0.65, m = 0.5.
-- Simulating the higher test distractor density (false positives from distractors weighted 1.9×) moved the optimum only to t ≈ 0.70, with a negligible score difference, so the choice is robust.
+- (t, m) are grid-searched to maximize the exact macro F0.5 over all 2.2M training S1 entities, using out-of-fold probabilities, singletons and blocking misses included. Final in-distribution setting: t = 0.65, m = 0.6.
+- Robustness checks:
+  - **Test distractor density:** weighting distractor false positives 1.9× (the test/train ratio) moves the optimum only to t ≈ 0.70, with negligible score difference.
+  - **Unseen country:** leave-one-country-out runs (Appendix B) show that a country absent from training scores 2–3.5 points lower, and its best threshold is 0.75 in every run. Being stricter in-distribution costs only ~0.0002. So S1 entities whose country label does not occur in training (France in the test set) use t = 0.75, m = 0.5. This is a generic rule for any unseen label, not a France-specific one.
 
 ---
 
@@ -141,20 +143,31 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 | + name uniqueness, state agreement, name ambiguity | 0.9830 |
 | + stage 3 (context from stage-2 probabilities) | 0.9850 |
 | + blocking v2 (char top-30, brand+house key) | 0.9859 |
-| [+ pruning v2 with string features, top-8] | [ ] |
+| + pruning v2 (string features in the ranker, top-8 per record) | 0.9860 |
+| (tried) a fourth refinement stage (context from stage-3 probabilities) | 0.9858, not used |
 
 - **F_0.5 Score (macro):**
   - Out-of-fold [0.98589 → final] (US [0.9863], India [0.9853]).
   - Public leaderboard [ ].
   - A further refinement round (stage 4) did not help (0.98576).
-- **Common false positives (wrong merges), 24K pairs on train:**
-  - distractor businesses with a similar name in a different city or state of the same country
-  - records whose true S1 was never retrieved, so the best wrong candidate looks confident
-  - neighbouring house numbers of different businesses (`2213` vs `2214 arlington ter`)
-- **Common false negatives (missed matches):**
-  - 59% of in-candidate misses are records with an **empty address** and a generic or heavily altered name, where several S1 entities are plausible
-  - records whose name is a completely different trade name and whose address is partial
-  - most pairs lost in blocking are the same empty-address ambiguous cases
+- **Score by entity type (train OOF):**
+
+  | Entity type | Count | F0.5 |
+  |---|---|---|
+  | Singletons | 123K | 0.987 |
+  | Exactly 1 true match (hardest) | 119K | 0.946 |
+  | 2–3 matches | 906K | 0.986 |
+  | 4–5 matches | 806K | 0.990 |
+  | 6+ matches | 252K | 0.991 |
+
+- **Common false positives (wrong merges):** 23.5K, 0.32% of predicted pairs.
+  - 82% are distractor records (businesses with no S1 entity); 18% belong to another S1.
+  - 69% have a near-identical name and 26% the same house number. The data contains deliberately planted look-alikes: `jarleus doubleline group | 2638 jefferson ave` vs `jarleuz doubleline group | 2638 jefferson ave` is a non-match, as are `2925` vs `2928 madison ave` and `620` vs `623 3 st`. These are indistinguishable from true noisy duplicates.
+  - Only 1,578 of 123K singleton S1 entities receive a wrong match.
+- **Common false negatives (missed matches):** 251K true pairs; 131K inside the candidates, 120K never retrieved or pruned away.
+  - 62% of in-candidate misses have an **empty record address** (vs 3.4% of all true pairs), with a generic or altered name shared by several S1 entities (`prime grand hall`, `sidhant nidhi services`).
+  - 11% are trade names with no name overlap (`brixnexvio` for `alisa j student do`), matchable only through a partial address.
+  - S2 and S3 fail at the same rate.
 
 ---
 
@@ -178,6 +191,17 @@ python -m src.run_pipeline --config configs/base.yaml
 It regenerates `output/matching_results.tsv` and `output/candidate_pairs.tsv` (~5 h on a 12-thread CPU, 31 GB RAM and an RTX 4060). Each stage can also be run on its own (see README).
 
 ### B. Additional Results
+- **Leave-one-country-out (proxy for the unseen France label):** a stage-2 model trained on one country only is scored on the other (`src/loco.py`).
+
+  | Setting | US → India | India → US |
+  |---|---|---|
+  | All features, t = 0.6 | 0.9488 | 0.9643 |
+  | All features, best threshold | 0.9509 (t = 0.75) | 0.9677 (t = 0.75) |
+  | Without the non-Latin flag | 0.9487 | 0.9643 |
+  | Also without length / name-frequency / legal / state features | 0.9441 | 0.9623 |
+  | Country included in training (reference) | 0.9836 | 0.9850 |
+
+  Conclusions: the feature set transfers best as it is; the stricter threshold helps an unseen country.
 - Blocking/pruning recall per view and per setting: see Section 3.
 - Pruning curve (train OOF, blocking v1): top-3 97.73%, top-5 97.95%, top-8 98.08% of true pairs, versus 98.23% before pruning.
 - Test-set checks: 5.7% of test S1 predicted singleton (train singleton rate 5.6%); ~3.4 matches per S1 in every country (France 3.40, India 3.34, US 3.38).

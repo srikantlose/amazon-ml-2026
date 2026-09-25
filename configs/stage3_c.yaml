@@ -1,0 +1,15 @@
+# Stage-3 ensemble member C: different seed, smaller trees, lower learning rate.
+seed: 11
+model:
+  train_frac: 0.75
+  valid_frac: 0.02
+  lightgbm:
+    learning_rate: 0.03
+    n_estimators: 8000
+    num_leaves: 63
+    min_child_samples: 50
+    feature_fraction: 0.9
+    bagging_fraction: 0.7
+decision:
+  thresholds: [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75]
+  margins: [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]

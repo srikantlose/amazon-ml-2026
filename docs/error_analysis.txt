@@ -1,0 +1,48 @@
+OOF macro F0.5 0.98601
+             mean    size
+bucket                   
+singleton  0.9872  123247
+1          0.9458  119157
+2-3        0.9862  906053
+4-5        0.9900  806072
+6+         0.9909  252292
+
+false positives: 23,547 (0.3177% of predicted pairs); distractor records 81.6%, records of another S1 18.4%
+  FP with near-identical name (token-set >= 90): 68.5%; same house number: 25.6%; record address empty: 15.3%
+  FP on singleton S1 entities: 7.1% (singletons wrongly given a match: 1,578 of 123,247)
+
+false negatives: 251,156 true pairs (inside candidates 131,499; never retrieved/pruned 119,657)
+  inside candidates: record address empty 61.6% (all true pairs 3.4%); name token-set < 50 (trade name / heavy rewrite) 10.6%; non-Latin name 8.2%; website-style name 1.4%
+  by source: S2 share of FN 48.6% (S2 share of true pairs 48.4%)
+
+example false positives:
+Traceback (most recent call last):
+  File "<stdin>", line 47, in <module>
+IndexError: index 4162448 is out of bounds for axis 0 with size 23547
+example false positives:
+  p=0.67 S1 cruz urban | 620 3 st andalusia il
+     rec cruz liquor | 623 3 srteet andalusia il
+  p=0.91 S1 jarleus ithax | 6606 breeden creek breeden wv
+     rec jarleus ixf | 
+     true S1 jarleus index | 1633 31 st richmond city va
+  p=0.86 S1 newton hunger heartland program | 1515 mayfair dr nc newton
+     rec newton viovio heartland | 1515 mayfair dr newton nc
+  p=0.93 S1 pevue | 105 liberty rd willard nc
+     rec pevue | 110 114 liberty rd willardd cdp nc
+  p=0.92 S1 industrial creative collective group | 2925 madison ave murfreesboro tn
+     rec industrial creative collective group | tn 2928 madison ave murfreesboro
+  p=0.99 S1 jarleus doubleline group | 2638 jefferson ave knoxville tn
+     rec jarleuz doubleline group | 2638 jefferson ave knoxville tn
+example false negatives (inside candidates):
+  p=0.44 S1 prime grand hall | 7975 woodridge dr unit 205 woodridge il
+     rec prime grand hall | 
+  p=0.36 S1 saikrupa solutions | ranni anakuzhikal thadathil buildings vayalathala po ranny pathanamthitta kl pathanamthitta
+     rec salkrupa slutcioms 8791605214 | kl pathanamthitta 144 anakuzhikal thadathil buildings ranni
+  p=0.61 S1 sidhant nidhi | r3 scheme shri ram vatika village harchandpura vas jaipur rj
+     rec sidhant nidhi services | 
+  p=0.70 S1 alisa j student do | 4121 lahmeyer rd fort wayne in
+     rec brixnexvio | fort wayne in 4121 lahmeyer rd
+  p=0.16 S1 digital commercial technologies | ny 45 smith rd veteran
+     rec digital commercial technologies enterprises | 
+  p=0.32 S1 colonial bioworks | 10744 castleton turn upper marlboro md
+     rec ciradova | castleton turn upper marlbro md
