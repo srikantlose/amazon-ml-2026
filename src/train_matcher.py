@@ -21,7 +21,7 @@ import pandas as pd
 from src.blocking import pruned_path
 from src.data import build_labels
 from src.decide import tune
-from src.features import features_dir, load_features
+from src.features import features_dir, load_features, load_part, part_columns
 from src.normalize import records_path
 from src.utils import (add_config_arg, cache_dir, get_logger, load_config, log_experiment, make_run_id,
                        seed_everything, timer)
@@ -45,6 +45,8 @@ def main():
     ap.add_argument("--name", default="")
     ap.add_argument("--notes", default="")
     ap.add_argument("--drop", nargs="*", default=[], help="feature columns to leave out")
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="additional pair-aligned feature folders, e.g. features_s3_<run> from src.refine")
     args = ap.parse_args()
     cfg = load_config(args.config)
     mcfg = cfg["model"]
@@ -69,10 +71,13 @@ def main():
     u_s1 = (h // n_folds) % 10_000 / 10_000.0
     fold, u = fold_s1[s1], u_s1[s1]
     need = np.flatnonzero(u < mcfg["train_frac"] + mcfg["valid_frac"])
-    cols = [c for c in pd.read_parquet(next(features_dir(cfg, "train").glob("part_*.parquet"))).columns
-            if c not in set(args.drop)]
+    drop = set(args.drop)
+    cols_by_dir = {d: [c for c in part_columns(cfg, "train", d) if c not in drop]
+                   for d in ["features", *args.extra]}
+    cols = [c for cs in cols_by_dir.values() for c in cs]
     with timer(f"load {len(need):,} sampled rows", log):
-        X_need = load_features(cfg, "train", rows=need, columns=cols)
+        X_need = pd.concat([load_features(cfg, "train", rows=need, columns=cs, subdir=d)
+                            for d, cs in cols_by_dir.items()], axis=1)
 
     models = []
     for f in range(n_folds):
@@ -93,8 +98,8 @@ def main():
     oof = np.zeros(len(y), dtype=np.float32)
     chunk = cfg["features"]["chunk_pairs"]
     with timer("OOF prediction", log):
-        for i, p in enumerate(sorted(features_dir(cfg, "train").glob("part_*.parquet"))):
-            X = pd.read_parquet(p, columns=cols)
+        for i, _ in enumerate(sorted(features_dir(cfg, "train").glob("part_*.parquet"))):
+            X = load_part(cfg, "train", i, cols_by_dir)
             lo = i * chunk
             fp = fold[lo:lo + len(X)]
             for f, booster in enumerate(models):
@@ -113,7 +118,7 @@ def main():
     imp = pd.Series(np.mean([m.feature_importance("gain") for m in models], axis=0), index=cols)
     imp.sort_values(ascending=False).to_csv(out / "importance.csv")
     log.info("top features:\n%s", imp.sort_values(ascending=False).head(15).round(0).to_string())
-    meta = {"run_id": run_id, "features": cols, "decision": best, "n_folds": n_folds,
+    meta = {"run_id": run_id, "features": cols, "feature_dirs": cols_by_dir, "decision": best, "n_folds": n_folds,
             "params": mcfg, "best_iterations": [m.best_iteration for m in models],
             "per_country": {k: float(v) for k, v in table.iloc[0].items() if k.startswith("f05_")}}
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")

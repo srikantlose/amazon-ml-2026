@@ -18,7 +18,7 @@ import pandas as pd
 from src.blocking import pruned_path
 from src.data import CANDIDATE_HEADER, MATCHING_HEADER
 from src.decide import select
-from src.features import features_dir
+from src.features import features_dir, load_part
 from src.normalize import records_path
 from src.train_matcher import run_dir
 from src.utils import add_config_arg, get_logger, load_config, resolve, timer
@@ -49,10 +49,11 @@ def predict_test(cfg: dict, run_id: str) -> np.ndarray:
     meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
     boosters = [lgb.Booster(model_file=str(p)) for p in sorted(d.glob("model_fold*.txt"))]
     parts = sorted(features_dir(cfg, "test").glob("part_*.parquet"))
+    cols_by_dir = meta.get("feature_dirs") or {"features": meta["features"]}
     probs = []
     with timer(f"predict test with {len(boosters)} models", log):
-        for p in parts:
-            X = pd.read_parquet(p, columns=meta["features"])
+        for i in range(len(parts)):
+            X = load_part(cfg, "test", i, cols_by_dir)[meta["features"]]
             probs.append(np.mean([b.predict(X) for b in boosters], axis=0).astype(np.float32))
     prob = np.concatenate(probs)
     np.save(d / "test_prob.npy", prob)

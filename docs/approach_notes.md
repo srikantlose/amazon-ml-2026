@@ -38,3 +38,9 @@
 |---|---|---|---|---|
 | lgb_v1_0925_032005 (sub-01) | 72 features, 10% S1 groups per fold, lr 0.08 | 0.9795 | 0.98031 (US 0.9820, IN 0.9778) | |
 | lgb_bigtrain_0925_033136 | 45% S1 groups, lr 0.05 (~3.3K trees) | 0.9795 | 0.98250 (US 0.9838, IN 0.9806) | |
+| lgb_sib_0925_040217 (sub-02) | + sibling features (similarity to the S1's confident stage-1 records) | 0.9795 | 0.98279 (US 0.9840, IN 0.9810) | |
+| lgb_v3_0925_044935 | + name uniqueness (S1 name frequency), state agreement (first/last alphabetic token), name ambiguity within record | 0.9795 | 0.98298 (US 0.9841, IN 0.9812) | |
+
+## Error analysis after sub-02 (OOF)
+- False negatives: 55% have an empty record address (vs 3.3% of all true pairs); probabilities spread 0.1–0.6.
+- False positives: similar names in another city/state; wrong S1 chosen when the true S1 was pruned away.

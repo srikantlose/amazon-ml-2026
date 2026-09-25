@@ -119,17 +119,19 @@ def group_features(cands: pd.DataFrame, s1_country: np.ndarray | None = None) ->
     return pd.DataFrame(out)
 
 
-def sibling_features(cands: pd.DataFrame, B: dict, min_p1: float = 0.8, max_sib: int = 4) -> pd.DataFrame:
+def sibling_features(cands: pd.DataFrame, B: dict, min_p1: float = 0.8, max_sib: int = 4,
+                     prob: np.ndarray | None = None, prefix: str = "sib") -> pd.DataFrame:
     """Similarity of each record to the other records confidently linked to the same S1.
 
     Records of one business in S2 and S3 often resemble each other more than either resembles
     the S1 record (e.g. both drop the same word, or both carry the address S1 spells differently).
-    "Confident" = the record's best stage-1 candidate with p1 >= min_p1; up to max_sib per S1.
-    Uses only stage-1 probabilities (out-of-fold on train), never labels.
+    "Confident" = the record's best candidate with probability >= min_p1 (stage-1 p1 by default,
+    or the given `prob`, e.g. out-of-fold stage-2 probabilities); up to max_sib per S1.
+    Uses only model probabilities (out-of-fold on train), never labels.
     """
     s1 = cands["s1"].to_numpy(np.int64)
     rec = cands["rec"].to_numpy(np.int64)
-    p1 = cands["p1"].to_numpy(np.float32)
+    p1 = cands["p1"].to_numpy(np.float32) if prob is None else np.asarray(prob, np.float32)
     rank = _group_stats(rec, p1)[0]
     conf = np.flatnonzero((rank == 0) & (p1 >= min_p1))
     sib = pd.DataFrame({"s1": s1[conf], "sib": rec[conf], "p": p1[conf]})
@@ -140,14 +142,14 @@ def sibling_features(cands: pd.DataFrame, B: dict, min_p1: float = 0.8, max_sib:
     t = t[t["rec"] != t["sib"]]
     pi, ri, si = t["pair"].to_numpy(), t["rec"].to_numpy(), t["sib"].to_numpy()
     out = {}
-    for name, field, scorer in (("sib_name", "name_n", fuzz.token_set_ratio),
-                                ("sib_ns", "name_ns", fuzz.ratio),
-                                ("sib_addr", "addr_n", fuzz.token_set_ratio)):
+    for name, field, scorer in (("name", "name_n", fuzz.token_set_ratio),
+                                ("ns", "name_ns", fuzz.ratio),
+                                ("addr", "addr_n", fuzz.token_set_ratio)):
         v = _cp(B[field][ri], B[field][si], scorer).astype(np.float32)
         best = np.full(len(cands), -1.0, np.float32)
         np.maximum.at(best, pi, v)
-        out[name] = np.where(best < 0, np.nan, best).astype(np.float32)
-    out["n_sib"] = np.bincount(pi, minlength=len(cands)).astype(np.float32)
+        out[f"{prefix}_{name}"] = np.where(best < 0, np.nan, best).astype(np.float32)
+    out[f"n_{prefix}"] = np.bincount(pi, minlength=len(cands)).astype(np.float32)
     return pd.DataFrame(out)
 
 
@@ -248,8 +250,8 @@ def pair_features(A: dict, B: dict, ia: np.ndarray, ib: np.ndarray) -> pd.DataFr
     return pd.DataFrame(f)
 
 
-def features_dir(cfg: dict, split: str):
-    return cache_dir(cfg, split) / "features"
+def features_dir(cfg: dict, split: str, subdir: str = "features"):
+    return cache_dir(cfg, split) / subdir
 
 
 def build(cfg: dict, split: str) -> None:
@@ -283,9 +285,32 @@ def build(cfg: dict, split: str) -> None:
     log.info("wrote %d parts to %s", i + 1, out)
 
 
-def load_features(cfg: dict, split: str, rows: np.ndarray | None = None, columns=None) -> pd.DataFrame:
+def write_parts(df: pd.DataFrame, out_dir, chunk: int) -> None:
+    """Write a pair-aligned feature table as part_XXX.parquet files (same chunking as features)."""
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
+    for i, s in enumerate(range(0, len(df), chunk)):
+        df.iloc[s:s + chunk].to_parquet(out_dir / f"part_{i:03d}.parquet", index=False)
+
+
+def part_columns(cfg: dict, split: str, subdir: str = "features") -> list[str]:
+    import pyarrow.parquet as pq
+
+    first = sorted(features_dir(cfg, split, subdir).glob("part_*.parquet"))[0]
+    return pq.ParquetFile(first).schema_arrow.names
+
+
+def load_part(cfg: dict, split: str, i: int, columns_by_dir: dict) -> pd.DataFrame:
+    """Part i of several aligned feature folders, side by side: {subdir: columns}."""
+    frames = [pd.read_parquet(features_dir(cfg, split, d) / f"part_{i:03d}.parquet", columns=cols)
+              for d, cols in columns_by_dir.items()]
+    return pd.concat(frames, axis=1) if len(frames) > 1 else frames[0]
+
+
+def load_features(cfg: dict, split: str, rows: np.ndarray | None = None, columns=None,
+                  subdir: str = "features") -> pd.DataFrame:
     """Load feature parts (optionally only the given global row positions, sorted ascending)."""
-    parts = sorted(features_dir(cfg, split).glob("part_*.parquet"))
+    parts = sorted(features_dir(cfg, split, subdir).glob("part_*.parquet"))
     chunk = cfg["features"]["chunk_pairs"]
     frames = []
     for i, p in enumerate(parts):

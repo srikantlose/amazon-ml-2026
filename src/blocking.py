@@ -42,7 +42,7 @@ log = get_logger("blocking")
 ALPHABET = " abcdefghijklmnopqrstuvwxyz0123456789"
 GRAMS = [a + b + c for a in ALPHABET for b in ALPHABET for c in ALPHABET]
 FIELDS = {"name": "name_core", "addr": "addr_n"}
-VIEW_BITS = {"full": 1, "name": 2, "addr": 4, "key": 8, "tfull": 16, "tname": 32, "taddr": 64}
+VIEW_BITS = {"full": 1, "name": 2, "addr": 4, "key": 8, "tfull": 16, "tname": 32, "taddr": 64, "hkey": 128}
 
 _VEC = None
 _IDF = None
@@ -292,11 +292,29 @@ def name_key_pairs(s1c: pd.DataFrame, s23c: pd.DataFrame, max_group: int) -> tup
     return m["s1"].to_numpy(np.int64), m["rec"].to_numpy(np.int64)
 
 
+def house_key_pairs(s1c: pd.DataFrame, s23c: pd.DataFrame, max_group: int) -> tuple[np.ndarray, np.ndarray]:
+    """Exact (first name token, house number) matches.
+
+    Catches the "brand token kept, rest of the name replaced" pattern when the house number
+    survives ("ahmedabad cargo | 301 ..." vs "ahmedabad partners | 301 ...").
+    """
+    def keyed(df):
+        return df.assign(first=df["name_core"].str.split(n=1).str[0].fillna(""))
+    left, right = keyed(s1c), keyed(s23c)
+    left = left[(left["house"] != "") & (left["first"] != "")]
+    sizes = left.groupby(["first", "house"])["s1"].transform("size")
+    left = left.loc[sizes <= max_group, ["s1", "first", "house"]]
+    right = right.loc[(right["house"] != "") & (right["first"] != ""), ["rec", "first", "house"]]
+    m = right.merge(left, on=["first", "house"])
+    return m["s1"].to_numpy(np.int64), m["rec"].to_numpy(np.int64)
+
+
 def generate(cfg: dict, split: str, sample_frac: float = 1.0, force: bool = False) -> pd.DataFrame:
     bcfg = cfg["blocking"]
     # only the columns blocking needs: the full record tables cost several GB at this scale
-    s1 = pd.read_parquet(records_path(cfg, split, "s1"), columns=["country", "name_core", "addr_n"])
-    s23 = pd.read_parquet(records_path(cfg, split, "s23"), columns=["country", "name_core", "addr_n", "addr_empty"])
+    s1 = pd.read_parquet(records_path(cfg, split, "s1"), columns=["country", "name_core", "addr_n", "house"])
+    s23 = pd.read_parquet(records_path(cfg, split, "s23"),
+                          columns=["country", "name_core", "addr_n", "addr_empty", "house"])
     vec = vectors(cfg, split, s1, s23, force=force)
     s1["s1"] = np.arange(len(s1))
     s23["rec"] = np.arange(len(s23))
@@ -329,13 +347,14 @@ def generate(cfg: dict, split: str, sample_frac: float = 1.0, force: bool = Fals
             s1_local = [got[v][1] for v in got]
             q_local = [got[v][0] for v in got]
             bits = [np.full(len(got[v][0]), VIEW_BITS[v], np.uint8) for v in got]
-            ks1, krec = name_key_pairs(s1c, s23c, bcfg["name_key_max_group"])
-            if len(ks1):
-                pos_s1 = pd.Index(s1_idx).get_indexer(ks1)
-                pos_q = pd.Index(q_idx).get_indexer(krec)
-                s1_local.append(pos_s1)
-                q_local.append(pos_q)
-                bits.append(np.full(len(ks1), VIEW_BITS["key"], np.uint8))
+            key_views = [("key", name_key_pairs(s1c, s23c, bcfg["name_key_max_group"]))]
+            if bcfg.get("house_key_max_group", 0) > 0:
+                key_views.append(("hkey", house_key_pairs(s1c, s23c, bcfg["house_key_max_group"])))
+            for view, (ks1, krec) in key_views:
+                if len(ks1):
+                    s1_local.append(pd.Index(s1_idx).get_indexer(ks1))
+                    q_local.append(pd.Index(q_idx).get_indexer(krec))
+                    bits.append(np.full(len(ks1), VIEW_BITS[view], np.uint8))
             a = np.concatenate(s1_local).astype(np.int64)
             b = np.concatenate(q_local).astype(np.int64)
             m = np.concatenate(bits)

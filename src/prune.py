@@ -137,6 +137,13 @@ def train(cfg: dict) -> None:
             m.fit(assemble(cands, stats, s23, tr), y[tr])
             m.booster_.save_model(str(mdir / f"stage1_fold{f}.txt"))
             boosters.append(m.booster_)
+    # one model on the sampled S1 groups of all folds scores the test set (a third of the cost of
+    # averaging the fold models over 200M+ pairs)
+    tr_all = np.flatnonzero(u < pcfg["train_frac"])
+    with timer(f"stage-1 full model on {len(tr_all):,} pairs", log):
+        m = lgb.LGBMClassifier(**PARAMS, random_state=cfg["seed"], n_jobs=-1)
+        m.fit(assemble(cands, stats, s23, tr_all), y[tr_all])
+        m.booster_.save_model(str(mdir / "stage1_full.txt"))
     with timer("stage-1 OOF prediction", log):
         oof = predict_chunked(boosters, cands, stats, s23, rows_by_model=fold)
     del stats
@@ -168,8 +175,10 @@ def apply_test(cfg: dict) -> None:
     s1_country = load_records(cfg, "test", "s1")["country"].to_numpy()
     with timer(f"group stats over {len(cands):,} pairs", log):
         stats = group_stats(cands, s1_country)
-    boosters = [lgb.Booster(model_file=str(p)) for p in sorted(mdir.glob("stage1_fold*.txt"))]
-    with timer("stage-1 test prediction", log):
+    full = mdir / "stage1_full.txt"
+    boosters = ([lgb.Booster(model_file=str(full))] if full.exists()
+                else [lgb.Booster(model_file=str(p)) for p in sorted(mdir.glob("stage1_fold*.txt"))])
+    with timer(f"stage-1 test prediction ({len(boosters)} model(s))", log):
         prob = predict_chunked(boosters, cands, stats, s23)
     del stats
     k = keep_mask(cands["rec"].to_numpy(np.int64), prob, pcfg["top_n"], pcfg["min_prob"])
