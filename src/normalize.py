@@ -80,6 +80,11 @@ STATES = {
     "tamil nadu": "tn", "gujarat": "gj", "west bengal": "wb", "telangana": "tg",
     "haryana": "hr", "rajasthan": "rj", "kerala": "kl", "bihar": "br",
     "madhya pradesh": "mp", "andhra pradesh": "ap", "punjab": "pb", "orissa": "od", "odisha": "od",
+    # France: S1 always writes the region, S2/S3 write the region or the department. The
+    # departments that occur map to their region's code, like US/India state names above.
+    "hauts de france": "hdf", "nord": "hdf", "pas de calais": "hdf",
+    "nouvelle aquitaine": "naq", "gironde": "naq",
+    "pays de la loire": "pdl", "loire atlantique": "pdl",
 }
 
 # ------------------------------------------------------------------ low-level cleaning

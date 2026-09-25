@@ -30,7 +30,7 @@ blocking:
     tname: 5
     taddr: 5
   token_max_df: 2000                      # tokens in more S1 records than this are left out of the index
-  token_workers: 12                       # each worker holds the index plus a chunk of sparse products (~1 GB)
+  token_workers: 8                        # each worker holds the index plus a chunk of sparse products; 12 can exhaust 31 GB
   token_chunk: 5000
   token_min_score: 0.02                   # ignore near-zero token overlaps when ranking
   name_key_max_group: 20                  # exact name_core join, skipped for very common names
