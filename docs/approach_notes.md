@@ -58,6 +58,20 @@
 - String features add little (+0.04 pt at top 5); most of the gain is keeping 8 candidates (12.37M pairs, 1.20/record).
 - Runtime: group stats 20 min, 4 ranker fits 10 min, OOF scoring with string features 22 min.
 
+## Leave-one-country-out (proxy for unseen France), stage 2, current candidates
+| setting | US → India | India → US |
+|---|---|---|
+| all features, t=0.6 m=0.5 | 0.9488 | 0.9643 |
+| all features, best (t=0.75) | 0.9509 | 0.9677 |
+| drop name_non_latin | 0.9487 | 0.9643 |
+| drop length/frequency/legal/state too | 0.9441 | 0.9623 |
+| country in training (reference OOF) | 0.9836 | 0.9850 |
+- Keep all features. For unseen country labels use t=0.75, m=0.5 (submission 06); in-distribution cost ~0.0002.
+
+## Stage-3 ensemble (25 Sep, 12:57-14:10)
+- Members: lgb_s3c (0.98601), wider trees + feature_fraction 0.6 (0.98601), smaller trees + lr 0.03 (0.98599).
+- Average of 3: 0.98605 (+0.00004). The members are too correlated; not worth the extra test scoring. Not used.
+
 ## Test-set composition
 - Test has 5.75 records per S1 vs 4.68 in train while predicted matches per S1 stay ~3.4 → ~39% distractor records in test vs 26% in train.
 - Simulating 1.9x distractor false positives on OOF moves the best threshold 0.60 → 0.70 but changes F0.5 by only 0.0001; cost of the extra distractors ≈ 0.001.
