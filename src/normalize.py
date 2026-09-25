@@ -95,6 +95,12 @@ _ORDINAL = re.compile(r"\b(\d+)(?:st|nd|rd|th)\b")
 _STATE_RE = re.compile(r"\b(" + "|".join(sorted(map(re.escape, STATES), key=len, reverse=True)) + r")\b")
 _DOMAIN_RE = re.compile(r"\b([a-z0-9][a-z0-9-]*)\s*\.\s*(?:co\s*\.\s*in|com|net|org|in|co|fr|biz|info|us)\b")
 _HAS_DIGIT = re.compile(r"\d")
+# "N° 14", "Nº14": the degree/ordinal sign would romanize to "deg" ("ndeg14")
+_NUMERO = re.compile(r"\b[nN]\s*[°º]\s*")
+# number tokens: "no169" / "ndeg14" / "n14" -> "169" / "14" / "14"; "0010" -> "10"
+_NUM_PREFIX = re.compile(r"^(?:ndeg|num|no|n)(?=\d)")
+_LEADING_ZEROS = re.compile(r"^0+(?=\d)")
+_HOUSE = re.compile(r"^(\d+)")
 
 # learned maps, set per process (see _init_worker)
 _TOKEN_MAP: dict = {}
@@ -148,16 +154,30 @@ def norm_name(raw: str) -> tuple[str, str, str, bool, bool]:
     return " ".join(toks), " ".join(core), "".join(core), is_domain, non_latin
 
 
+def _canon_number(tok: str) -> str:
+    """Formatting noise on numbers: glued "no"/"n°" prefixes and leading zeros."""
+    if not _HAS_DIGIT.search(tok):
+        return tok
+    return _LEADING_ZEROS.sub("", _NUM_PREFIX.sub("", tok))
+
+
 def norm_addr(raw: str) -> tuple[str, str, str, str]:
-    """-> (addr_n, addr_nums, house, postal)."""
-    s = " ".join(tokens(to_latin(raw, components=True)))
+    """-> (addr_n, addr_nums, house, postal).
+
+    Number tokens are canonicalized (no leading zeros, no "no"/"n°" prefix). The house number
+    is the digit run of the first token that starts with a digit ("286b" -> "286"); tokens
+    that start with letters ("cs21103", "bp557") are box/lot codes, not house numbers.
+    """
+    s = " ".join(tokens(to_latin(_NUMERO.sub("no ", raw), components=True)))
     if not s:
         return "", "", "", ""
     s = _ORDINAL.sub(r"\1", s)
     s = _STATE_RE.sub(lambda m: STATES[m.group(1)], s)
-    toks = [ADDR.get(t, t) for t in s.split() if t not in ADDR_DROP]
+    toks = [_canon_number(ADDR.get(t, t)) for t in s.split() if t not in ADDR_DROP]
+    toks = [t for t in toks if t and t not in ADDR_DROP]
     nums = [t for t in toks if _HAS_DIGIT.search(t)]
-    house = nums[0] if nums else ""
+    houses = [_HOUSE.match(t).group(1) for t in nums if t[0].isdigit()]
+    house = houses[0] if houses else ""
     postal = " ".join(sorted({t for t in nums if t.isdigit() and len(t) in (5, 6)}))
     return " ".join(toks), " ".join(sorted(set(nums))), house, postal
 
