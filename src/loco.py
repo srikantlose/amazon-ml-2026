@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--eval-country", required=True)
     ap.add_argument("--reference-run", help="stage-2 run trained on all countries, for comparison")
     ap.add_argument("--drop", nargs="*", default=[], help="feature columns to leave out")
+    ap.add_argument("--extra", nargs="*", default=[], help="additional pair-aligned feature folders")
     args = ap.parse_args()
     cfg = load_config(args.config)
     mcfg = cfg["model"]
@@ -49,13 +50,19 @@ def main():
     pair_country = country[s1]
     u = ((s1_hash(s1_rec["entity_id"].to_numpy()) // mcfg["n_folds"]) % 10_000 / 10_000.0)[s1]
 
-    cols = [c for c in part_columns(cfg, "train") if c not in set(args.drop)]
+    cols_by_dir = {d: [c for c in part_columns(cfg, "train", d) if c not in set(args.drop)]
+                   for d in ["features", *args.extra]}
+
+    def load(rows):
+        return pd.concat([load_features(cfg, "train", rows=rows, columns=cs, subdir=d)
+                          for d, cs in cols_by_dir.items()], axis=1)
+
     tr = np.flatnonzero((pair_country == args.train_country) & (u < mcfg["train_frac"]))
     va = np.flatnonzero((pair_country == args.train_country) & (u >= mcfg["train_frac"])
                         & (u < mcfg["train_frac"] + mcfg["valid_frac"]))
     ev = np.flatnonzero(pair_country == args.eval_country)
     with timer("load features", log):
-        X = load_features(cfg, "train", rows=np.sort(np.r_[tr, va]), columns=cols)
+        X = load(np.sort(np.r_[tr, va]))
     order = np.sort(np.r_[tr, va])
     is_tr = np.isin(order, tr)
     with timer(f"fit on {args.train_country}: {is_tr.sum():,} pairs", log):
@@ -64,7 +71,7 @@ def main():
                   callbacks=[lgb.early_stopping(mcfg["early_stopping_rounds"], verbose=False)])
     del X
     with timer(f"score {args.eval_country}: {len(ev):,} pairs", log):
-        prob = model.booster_.predict(load_features(cfg, "train", rows=ev, columns=cols))
+        prob = model.booster_.predict(load(ev))
 
     # evaluate on the held-out country's S1 entities only (its records never compete across countries)
     keep_s1 = country == args.eval_country
@@ -74,6 +81,7 @@ def main():
     row = table.sort_values("f05_eval", ascending=False).iloc[0]
     at_default = table[(table.threshold == 0.6) & (table.margin == 0.5)]
     msg = {"train_country": args.train_country, "eval_country": args.eval_country, "dropped": args.drop,
+           "extra": args.extra,
            "best_f05": float(row.f05_eval), "best_threshold": float(row.threshold), "best_margin": float(row.margin),
            "f05_at_0.6_0.5": float(at_default.f05_eval.iloc[0]) if len(at_default) else None}
     if args.reference_run:

@@ -1,0 +1,4 @@
+# Overlay: write predictions of the look-alike-feature runs to their own folder, so they can be
+# produced while another run owns output/.
+paths:
+  output_dir: output_la

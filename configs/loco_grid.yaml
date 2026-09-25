@@ -1,0 +1,5 @@
+# Overlay for src.loco: decision grid wide enough for an unseen country (stage2.yaml stops at 0.75,
+# which capped every earlier leave-one-country-out optimum at the grid edge).
+decision:
+  thresholds: [0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.98, 0.99]
+  margins: [0.3, 0.5, 0.7]

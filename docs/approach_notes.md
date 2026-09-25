@@ -80,6 +80,28 @@
 - False negatives: 55% have an empty record address (vs 3.3% of all true pairs); probabilities spread 0.1–0.6.
 - False positives: similar names in another city/state; wrong S1 chosen when the true S1 was pruned away.
 
+## Look-alike records (26 Sep, 00:50-01:45)
+- Leaderboard deltas of the France threshold steps (0.65 → 0.75 → 0.85 → 0.95, same model, US/India rows identical)
+  imply that France pairs scored 0.85-0.95 are only ~58% correct, against ~90% for US/India pairs in that band.
+- Reading France pairs dropped between 0.85 and 0.95: about half are records that keep the S1's address and first
+  word but swap the descriptor ("mauges amis sas" → "mauges collectif sas", "livre federation" → "livre sportive").
+  These names exist as a single S2/S3 record and never as an S1: planted look-alike distractors.
+- Words the sources inject into names ("services"/"center"/"partners" in the US, "com"/"dr" in India,
+  "developpement"/"groupe"/"fils" in France) are 2-10x more frequent in S2/S3 names than in S1 names; ordinary
+  vocabulary ("club", "ecole", "amis", first names) sits at ~0.85x in every country. True matches often drop a
+  word and add filler ("pediatric clinic inc" → "pediatric inc services", 96% true in train), so a swap to
+  ordinary vocabulary looked like a match to the model.
+- Train labels, pairs the stage-1 ranker already likes (p1 ≥ 0.5): a swap to an ordinary word of 4+ letters with
+  a different initial is 1.5% (US) / 0.5% (India) true; same pattern with the same first word and same address
+  (the France case) 0.8% true (India, 5.8K pairs). Swaps sharing the initial are garbled abbreviations
+  ("care" → "cea", 50-65% true); contractions ("gaming" → "gg", "homes" → "hs") are treated as the same word.
+- Submission 10 accepted 23.5K France pairs of that pattern (8.8% of France S1), 8.6K India (1.0%), 3.5K US (0.5%).
+- Address word swaps with the same name and house number are 98-99.6% true in train (alternate city names), so
+  no address counterpart.
+- `src/lookalike.py`: 13 columns per pair (missing/extra words, extra words split into filler / vocabulary /
+  rare by the per-country S2/S3-vs-S1 frequency ratio, swap flag, swap similarity, shared initial, word length),
+  statistics from each split's own names, no labels. Used as an extra feature folder for stages 2 and 3.
+
 ## Country-frequent-token features (25 Sep, 14:10-15:00) — not used
 - Address/name similarities after removing tokens found in >1% of the country's records (admin areas, generic words).
 - Stage-2 OOF 0.98444 → 0.98470, but leave-one-country-out US→India 0.9488 → 0.9454 (India→US 0.9643 → 0.9645).
