@@ -125,6 +125,12 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
   - Only the categorical columns are used for the unseen country: the continuous word-frequency values identify individual words, which transferred badly (Appendix B).
 - **Relative candidate counts** (`src/relcounts.py`): the number of candidates of an S1 divided by its split/country mean. The test set has more distractor records (6.4–7.5 candidates per S1 vs 5.4–5.7 in train), and a stage-2 model re-scored with the raw count raised by 22% accepted ~25–30% more false pairs.
 
+**Final configuration (two stage-2/3 models, combined per country label):**
+- **Model A** is used for S1 entities whose country label occurs in training (US, India). It has all look-alike columns plus relative candidate counts. OOF F0.5 0.98741 (US 0.98760, India 0.98713).
+- **Model B** is used for S1 entities whose label never occurs in training (France). It keeps only the categorical look-alike columns, because the continuous word-frequency values identify individual words. French filler (`fils`, `france`) fell in the range of US distractor words (`group`, `north`), and model A rejected true "drop a word, add filler" matches in France. Model B scores OOF 0.98705 and transfers better to a left-out country in both directions (Appendix B).
+- Both models score the same candidate pairs, so `src/combine.py` simply takes each S1's row from the model for its label.
+- Public leaderboard for the combination: 0.982629. With the same US/India rows and France taken from the rebuild model plus the swap post-filter, it was 0.982205.
+
 **Model type:** LightGBM binary classifiers (MIT license, no pretrained language models):
 - stage 1 (pruning)
 - stage 2 (full features)

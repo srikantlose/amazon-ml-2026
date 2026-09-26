@@ -19,3 +19,5 @@ timestamp,run_id,owner,model,features,cv_score,lb_score,notes
 2026-09-26T03:16:22,lgb_stage2la_0926_023743,user,lightgbm,96 features,0.98619,,"t=0.6 m=0.5 {'f05_India': 0.9858286668762823, 'f05_US': 0.9864346930808238}"
 2026-09-26T03:35:01,lgb_stage3_0926_025245,user,lightgbm,97 features,0.98646,,"t=0.65 m=0.6 {'f05_India': 0.9859295107090716, 'f05_US': 0.9868161061026977}"
 2026-09-26T03:54:55,lgb_stage3la_0926_033632,user,lightgbm,110 features,0.98741,,"t=0.65 m=0.6 {'f05_India': 0.9871296943974058, 'f05_US': 0.9876025568725121}"
+2026-09-26T04:56:42,lgb_stage2lacat_0926_043451,user,lightgbm,93 features,0.98576,,"t=0.6 m=0.5 {'f05_India': 0.9852427085358706, 'f05_US': 0.9861011254072134}"
+2026-09-26T05:22:55,lgb_stage3lacat_0926_051023,user,lightgbm,107 features,0.98705,,"t=0.65 m=0.5 {'f05_India': 0.9866961843968746, 'f05_US': 0.9872795319533421}"

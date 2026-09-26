@@ -24,11 +24,18 @@ student_resource/utils/validate_submission.py
 ```
 Or set `data_dir` / `paths.validator` in `configs/base.yaml`.
 
-## 3. Run everything (about 5 hours on the hardware above)
+## 3. Run everything (about 7 hours on the hardware above)
 ```bash
-python -m src.run_pipeline --config configs/base.yaml
+bash scripts/reproduce_best.sh
 ```
-Or stage by stage (each stage caches its output under `data/cache/`):
+This is the configuration of the final submission:
+1. **Base pipeline:** `python -m src.run_pipeline --config configs/base.yaml` (normalize → blocking → prune → features → stage 2 → refine → stage 3 → predict).
+2. **Look-alike and relative-count columns for both splits:** `src.lookalike` and `src.relcounts`.
+3. **Model A**, used for country labels seen in training: stage 2 + refine + stage 3 with `--extra features_la features_rel --drop s1_n_cands`, predicted into `output_la/`.
+4. **Model B**, used for labels never seen in training (France): the same, but also dropping the three word-frequency look-alike columns, predicted into `output_lacat/` with the unseen-label threshold 0.75.
+5. **Combination:** `python -m src.combine --seen output_la --unseen output_lacat --out output`.
+
+The base pipeline alone, stage by stage (each stage caches its output under `data/cache/`):
 ```bash
 python -m src.normalize  --config configs/base.yaml                        # ~5 min
 python -m src.blocking   --config configs/base.yaml --split train          # ~35 min
@@ -53,6 +60,11 @@ python -m src.predict    --config configs/base.yaml --run <s3>             # wri
 | `features.py` | rapidfuzz similarities, numeric/state agreement, name uniqueness, competition and sibling-record features |
 | `train_matcher.py` | LightGBM pair classifier, 3 S1-grouped folds, out-of-fold predictions, decision tuning |
 | `refine.py` | stage-3 context features from stage-2 probabilities |
+| `lookalike.py` | look-alike name columns: word alignment, filler / ordinary-vocabulary / rare classes from per-country S2/S3-vs-S1 name frequencies, swap flag and shape |
+| `relcounts.py` | candidate count of an S1 relative to its split/country mean (replaces the raw count) |
+| `combine.py` | rows of seen country labels from one prediction, unseen labels from another (same candidates) |
+| `postfilter.py` | optional rule that drops accepted vocabulary-swap pairs (used for models without the look-alike columns) |
+| `loco.py` | leave-one-country-out check (train on one country, score the other) |
 | `decide.py` | one best S1 per record, threshold + margin tuned for macro F0.5 |
 | `predict.py` | test inference and the two output files |
 | `validate.py` | official validator + subset/format checks |
