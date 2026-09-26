@@ -9,4 +9,4 @@
   (la_extra_lratio_min, la_extra_lshare_max) place French filler in ranges that are distractor words in the US
   ("group", "north"), and stage 2 scores those pairs 0.36-0.58 where the rebuild scores 0.98-1.00.
 - same candidate pairs as submissions 13 (identical candidate_pairs.tsv); validator PASS (--check-ids)
-- public LB: pending
+- public LB: 0.982205 (+0.005893 vs submission 10)
