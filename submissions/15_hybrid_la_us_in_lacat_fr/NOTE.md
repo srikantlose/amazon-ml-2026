@@ -9,4 +9,4 @@
 - 13 / 14 / 15 differ only in the France rows: look-alike model at 0.85 / rebuild + post-filter at 0.95 /
   categorical look-alike model at 0.85
 - validator PASS (--check-ids)
-- public LB: pending
+- public LB: 0.982594 (+0.000389 vs submission 14: France rows only)
