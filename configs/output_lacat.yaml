@@ -1,0 +1,3 @@
+# Overlay: predictions of the categorical look-alike runs go to their own folder.
+paths:
+  output_dir: output_lacat

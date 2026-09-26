@@ -120,6 +120,26 @@
   empty addresses, filler additions and garbled names; the doubtful ones are same-name records at another house
   number or street. The 0.95 France threshold is no longer needed; submission 13 uses 0.85.
 
+## Leave-one-country-out with the look-alike columns (26 Sep, 04:10-04:35; stage-2 models, grid up to 0.99)
+| features | US → India (best t) | India → US (best t) |
+|---|---|---|
+| rebuild features | 0.9549 (0.80) | 0.9718 (0.85) |
+| + look-alike + relative counts | 0.9612 (0.65) | 0.9694 (0.85) |
+| + look-alike only | | 0.9695 (0.85) |
+| + relative counts only | | 0.9718 (0.90) |
+| + categorical look-alike columns (no word-frequency values) + relative counts | 0.9586 (0.75) | 0.9733 (0.90) |
+- The earlier optimum "0.75 for an unseen country" was the edge of the old grid; with the wider grid the
+  transfer optimum is 0.80-0.90 for the rebuild features.
+- The look-alike columns help US → India (+0.0063: India's negatives are descriptor swaps) but cost India → US
+  (−0.0023); relative counts are neutral. Explaining stage-2 scores of France pairs the look-alike model drops
+  ("cascades france club" → "cascades club et fils", p2 0.36 vs 0.99-1.00 before) points at the continuous
+  word-frequency columns: la_extra_lratio_min and la_extra_lshare_max pin down individual words, and French filler
+  ("fils" 0.44, "france" 0.19) falls in the range of US distractor words ("group" 0.38, "north" 0.81). The
+  categorical columns (swap / filler / rare counts, swap shape) are kept; the three frequency values are dropped.
+  That version improves transfer in both directions (+0.0037 US → India, +0.0015 India → US).
+- Same-name pairs with a different house number are 70-93% true in train (house numbers are garbled in true
+  matches) and accepted at ~99% precision, so France pairs of that kind are not treated as look-alikes.
+
 ## Country-frequent-token features (25 Sep, 14:10-15:00) — not used
 - Address/name similarities after removing tokens found in >1% of the country's records (admin areas, generic words).
 - Stage-2 OOF 0.98444 → 0.98470, but leave-one-country-out US→India 0.9488 → 0.9454 (India→US 0.9643 → 0.9645).
