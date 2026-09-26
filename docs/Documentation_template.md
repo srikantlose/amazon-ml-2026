@@ -41,6 +41,8 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
   - the *brand token kept while the other words are replaced* (`prock allstate llc` → `prock llc services`, `tps restaurants co` → `services tps co`)
   - typos and injected accents
   - trade names completely different from the registered name at the same address
+  - filler words injected by the sources (`services`, `center`, `partners` in the US; `com`, `dr` in India; `développement`, `groupe`, `& fils`, `france` in France), often while another word is dropped (`pediatric clinic inc` → `pediatric inc services`)
+- **Planted look-alikes:** distractor records that copy an entity's address and most of its name but swap one word for another ordinary word (`mauges amis sas` → `mauges collectif sas`, `galaxy seven international` → `galaxy seven global`). They exist only as single S2/S3 records, never as an S1, and the test set has far more of them than train (Section 4).
 - **Address noise:**
   - reordered components
   - abbreviations (`Rd`, `R.`, `AV`)
@@ -115,6 +117,13 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
   - source flag, length differences, non-Latin/website flags
   - **No country feature.**
 - **Stage-3 context:** the same competition and sibling statistics recomputed from stage-2 out-of-fold probabilities.
+- **Look-alike features** (`src/lookalike.py`, no labels involved):
+  - The two names are aligned word by word, tolerating typos, truncations and contractions (`gaming` ↔ `gg`, `homes` ↔ `hs`). Words of the S1 name missing from the record, and extra words in the record, are counted.
+  - Each extra word is classed as **filler**, **ordinary vocabulary** or **rare**. The class comes from how much more often the word appears in S2/S3 names than in S1 names of the same split and country, relative to the country's records-per-S1. Injected filler is 1.2–10× over-represented (US `services` 4.7, France `développement` 10.7); ordinary words sit at ≈0.85 in every country (`club`, `ecole`, first names). This is computed like IDF, per split and per country label, so the unseen France label gets its own statistics.
+  - The main flag is a *swap*: an S1 word is missing and an ordinary word appears instead, with its similarity, shared initial and length.
+  - Train labels, for pairs the stage-1 ranker already likes (p1 ≥ 0.5): a swap to an ordinary 4+-letter word with a different initial is **1.5% (US) / 0.5% (India) correct**. "Drop a word, add filler" is 94–96% correct. Swaps sharing the initial are garbled abbreviations (50–65% correct).
+  - Only the categorical columns are used for the unseen country: the continuous word-frequency values identify individual words, which transferred badly (Appendix B).
+- **Relative candidate counts** (`src/relcounts.py`): the number of candidates of an S1 divided by its split/country mean. The test set has more distractor records (6.4–7.5 candidates per S1 vs 5.4–5.7 in train), and a stage-2 model re-scored with the raw count raised by 22% accepted ~25–30% more false pairs.
 
 **Model type:** LightGBM binary classifiers (MIT license, no pretrained language models):
 - stage 1 (pruning)
@@ -129,7 +138,7 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 - (t, m) are grid-searched to maximize the exact macro F0.5 over all 2.2M training S1 entities, using out-of-fold probabilities, singletons and blocking misses included. Final in-distribution setting: t = 0.65, m = 0.6.
 - Robustness checks:
   - **Test distractor density:** weighting distractor false positives 1.9× (the test/train ratio) moves the optimum only to t ≈ 0.70, with negligible score difference.
-  - **Unseen country:** leave-one-country-out runs (Appendix B) show that a country absent from training scores 2–3.5 points lower, and its best threshold is 0.75 in every run. Being stricter in-distribution costs only ~0.0002. So S1 entities whose country label does not occur in training (France in the test set) use t = 0.75, m = 0.5. This is a generic rule for any unseen label, not a France-specific one.
+  - **Unseen country:** leave-one-country-out runs (Appendix B) show that a country absent from training scores 1–3 points lower. On a threshold grid up to 0.99, its best threshold is 0.75–0.90. S1 entities whose country label does not occur in training (France in the test set) therefore get their own stricter threshold, [final value]. This is a generic rule for any unseen label, not a France-specific one.
 
 ---
 
@@ -144,6 +153,9 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 | + stage 3 (context from stage-2 probabilities) | 0.9850 |
 | + blocking v2 (char top-30, brand+house key) | 0.9859 |
 | + pruning v2 (string features in the ranker, top-8 per record) | 0.9860 |
+| + house numbers canonicalized (leading zeros, `No`/`N°` prefixes, `9B` = `9 bis`) | 0.9865 |
+| + look-alike features + relative candidate counts | 0.9874 |
+| + look-alike features without word-frequency values (categorical) + relative counts | 0.9871 |
 | (tried) a fourth refinement stage (context from stage-3 probabilities) | 0.9858, not used |
 
 - **F_0.5 Score (macro):**
@@ -207,17 +219,27 @@ It regenerates `output/matching_results.tsv` and `output/candidate_pairs.tsv` (~
   - Cause: S1 always writes the region (`Hauts-de-France`), S2/S3 often the department (`Nord`), just as S3 spells out US state names that S1 abbreviates.
   - Fix: departments map to their region code during normalization, as state names already do.
   - Public leaderboard confirms France is where the gap to train OOF lies: raising only France's threshold from 0.65 to 0.75 improved the public score from 0.974431 to 0.974962.
-- **Leave-one-country-out (proxy for the unseen France label):** a stage-2 model trained on one country only is scored on the other (`src/loco.py`).
+- **Look-alikes on test (label-free):**
+  - Leaderboard deltas of France-only threshold changes (same model; US/India rows identical) imply that France pairs scored 0.85–0.95 were only ~58% correct, against ~90% for US/Indian pairs in that band.
+  - Reading those France pairs showed planted look-alikes (same address and first word, one descriptor swapped).
+  - Submission 10 accepted swap pairs for 8.75% of France S1, 1.0% of Indian and 0.5% of US S1. Out of fold the same model does this for 0.09% (US) / 0.21% (India) of S1, so test US/India also carry 5–6× more look-alikes than train.
+  - The look-alike model accepts 124 / 93 / ~400 such pairs (US / India / France) instead of 3,498 / 7,868 / 23,500+.
+- **Leave-one-country-out (proxy for the unseen France label):** a stage-2 model trained on one country only is scored on the other (`src/loco.py`, threshold grid up to 0.99).
 
   | Setting | US → India | India → US |
   |---|---|---|
-  | All features, t = 0.6 | 0.9488 | 0.9643 |
-  | All features, best threshold | 0.9509 (t = 0.75) | 0.9677 (t = 0.75) |
-  | Without the non-Latin flag | 0.9487 | 0.9643 |
-  | Also without length / name-frequency / legal / state features | 0.9441 | 0.9623 |
-  | Country included in training (reference) | 0.9836 | 0.9850 |
+  | Rebuild features, best threshold | 0.9549 (t = 0.80) | 0.9718 (t = 0.85) |
+  | + look-alike features incl. word-frequency values + relative counts | 0.9612 (t = 0.65) | 0.9694 (t = 0.85) |
+  | + look-alike features only | | 0.9695 |
+  | + relative counts only | | 0.9718 |
+  | + categorical look-alike features + relative counts | 0.9586 (t = 0.75) | 0.9733 (t = 0.90) |
+  | Country included in training (reference, t = 0.6) | 0.9843 | 0.9856 |
 
-  Conclusions: the feature set transfers best as it is; the stricter threshold helps an unseen country.
+  Conclusions:
+  - The continuous word-frequency values help towards India (descriptor-swap look-alikes) but hurt towards the US.
+  - Explaining the model's France scores showed why: French filler (`fils`, `france`) falls in the frequency range of US distractor words (`group`, `north`), so true "drop a word, add filler" matches were rejected.
+  - The categorical version improves transfer in both directions.
+  - Earlier runs on a grid that stopped at 0.75 had put the unseen-country optimum at the edge of the grid.
 - Blocking/pruning recall per view and per setting: see Section 3.
 - Pruning curve (train OOF, blocking v1): top-3 97.73%, top-5 97.95%, top-8 98.08% of true pairs, versus 98.23% before pruning.
 - Test-set checks: 5.7% of test S1 predicted singleton (train singleton rate 5.6%); ~3.4 matches per S1 in every country (France 3.40, India 3.34, US 3.38).
