@@ -6,4 +6,4 @@
 - reading: F(US+India on test) = LB / 0.850248, F(France in submission 16) = (0.982629 - LB) / 0.149752;
   compare F(US+India) with the OOF level of the look-alike model (0.9874)
 - validator PASS (the only warning: France ids outside the candidate pairs, by construction)
-- public LB: pending
+- public LB: 0.836972 -> F(US+India) = 0.98439, F(France in submission 16) = 0.97266
