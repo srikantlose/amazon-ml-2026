@@ -9,3 +9,4 @@
 - produced with `python -m src.combine --seen output_la --unseen output` after predicting the categorical run
   with configs/base.yaml (unseen-country threshold 0.75); validator PASS
 - public LB: 0.982629 (+0.000035 vs submission 15: France threshold 0.75 vs 0.85, within noise)
+- re-uploaded as the last submission of 26 Sep (same file)
