@@ -7,4 +7,4 @@
   of the extra mass is false pairs that a stricter threshold removes (estimated effect -0.0005 to +0.0015)
 - produced with `src.predict --threshold 0.80` into output_la080/ and `src.combine --seen output_la080 --unseen output`
 - validator PASS
-- public LB: pending (upload on 27 Sep; the 26 Sep slots ended with a re-upload of submission 16)
+- public LB: 0.98234 (-0.000289 vs submission 16): stricter US/India threshold hurts; keep the OOF-tuned 0.65
