@@ -1,0 +1,3 @@
+# Overlay: predictions of the big-training model B.
+paths:
+  output_dir: output_lacat_big
