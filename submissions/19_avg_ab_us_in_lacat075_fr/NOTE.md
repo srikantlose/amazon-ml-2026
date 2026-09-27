@@ -9,4 +9,4 @@
   than OOF and a slightly more permissive, OOF-tuned decision is the consistent direction
 - built with an inline average -> output_avg/, then `src.combine --seen output_avg --unseen output_lacat`
 - validator PASS
-- public LB: pending
+- public LB: 0.983167 (+0.000538 vs submission 16)
