@@ -28,12 +28,14 @@ Or set `data_dir` / `paths.validator` in `configs/base.yaml`.
 ```bash
 bash scripts/reproduce_best.sh
 ```
-This is the configuration of the final submission:
-1. **Base pipeline:** `python -m src.run_pipeline --config configs/base.yaml` (normalize → blocking → prune → features → stage 2 → refine → stage 3 → predict).
+This is the configuration of the final submission (public leaderboard 0.983405):
+1. **Base pipeline:** `python -m src.run_pipeline --config configs/base.yaml`. It produces the candidates, the base features and the "rebuild" stage-3 model.
 2. **Look-alike and relative-count columns for both splits:** `src.lookalike` and `src.relcounts`.
-3. **Model A**, used for country labels seen in training: stage 2 + refine + stage 3 with `--extra features_la features_rel --drop s1_n_cands`, predicted into `output_la/`.
-4. **Model B**, used for labels never seen in training (France): the same, but also dropping the three word-frequency look-alike columns, predicted into `output_lacat/` with the unseen-label threshold 0.75.
-5. **Combination:** `python -m src.combine --seen output_la --unseen output_lacat --out output`.
+3. **Model A and model B:** `bash scripts/train_big.sh A` and `bash scripts/train_big.sh B`. Each is stage 2 + refine + stage 3 on 90% / 95% of the other folds' S1 groups. Model A uses all look-alike columns; model B drops the three word-frequency columns.
+4. **Decision:** `python -m src.blend`.
+   - Labels seen in training (US, India): mean of A and B at threshold 0.60, margin 0.50.
+   - The label never seen in training (France): mean of B and the rebuild model at threshold 0.75, margin 0.50.
+5. **Post-filter:** `python -m src.combine --seen output_blend --unseen output_blend --unseen-postfilter --out output` drops vocabulary-swap look-alikes from the France rows.
 
 The base pipeline alone, stage by stage (each stage caches its output under `data/cache/`):
 ```bash
@@ -62,6 +64,8 @@ python -m src.predict    --config configs/base.yaml --run <s3>             # wri
 | `refine.py` | stage-3 context features from stage-2 probabilities |
 | `lookalike.py` | look-alike name columns: word alignment, filler / ordinary-vocabulary / rare classes from per-country S2/S3-vs-S1 name frequencies, swap flag and shape |
 | `relcounts.py` | candidate count of an S1 relative to its split/country mean (replaces the raw count) |
+| `blend.py` | final decision: mean of several runs per country group, thresholds, both output files |
+| `train_xgb.py` | XGBoost matcher on the same folds (tried; not in the final blend) |
 | `combine.py` | rows of seen country labels from one prediction, unseen labels from another (same candidates) |
 | `postfilter.py` | optional rule that drops accepted vocabulary-swap pairs (used for models without the look-alike columns) |
 | `loco.py` | leave-one-country-out check (train on one country, score the other) |

@@ -1,6 +1,6 @@
 # Handoff: Amazon ML Challenge 2026, Business Entity Resolution
 
-This is the full state of the project at handoff, **27 Sep 2026, ~01:00 IST**:
+This is the full state of the project at handoff, **27 Sep 2026, ~01:00 IST** (final-day update at 22:45 IST in §0):
 - what the task is
 - how the pipeline works
 - every experiment and leaderboard result, with its numbers
@@ -28,6 +28,25 @@ Read sections 0 and 11 first if you are short on time.
 1. Keep submission 16's file (or something that beats it) as the **last upload** of 27 Sep.
 2. Build the official final zip with `scripts/make_submission_zip.py`. It needs the **team name**, which the owner has not provided yet (ask them).
 3. Fill the placeholders in `docs/Documentation_template.md` (§11).
+
+### Final-day update (27 Sep, 22:45 IST)
+- **Final leaderboard submission: 25 = 0.983405** (`submissions/25_bigavg_us_in_mixbigB_rebuild_filter_fr/`). It is the last upload of the day, and one slot was left unused on purpose.
+- **Recipe of 25:**
+  - US/India = mean of `lgb_stage3labig_0927_181722` (model A retrained on 90% / 95% of the other folds' S1 groups, OOF 0.98769) and `lgb_stage3lacatbig_0927_181932` (model B, same, OOF 0.98736), at t = 0.60, m = 0.50 (OOF of the mean 0.98771).
+  - France = mean of that model B and the rebuild `lgb_stage3_0926_025245`, at 0.75 / 0.50, then `src.postfilter`.
+  - `src/blend.py` + `src.combine --unseen-postfilter` reproduce 25 byte for byte, and `scripts/reproduce_best.sh` rebuilds it from raw data.
+- **Uploads after the handoff:**
+
+  | # | Change | Score | Delta |
+  |---|---|---|---|
+  | 19 | A + B average for US/India, t = 0.60, m = 0.5 | 0.983167 | +0.00054 vs 16 |
+  | 22 | 19 with models retrained on more data | 0.983212 | |
+  | 23 | + XGBoost member (`src/train_xgb.py`, OOF 0.98768) | 0.98289 | **−0.00032**: XGBoost is stricter on test |
+  | 24 | 22 with US/India t = 0.55 | 0.983155 | |
+  | 25 | 22 with France from B + rebuild, post-filtered | **0.983405** | |
+
+  20 and 21 were built but not uploaded.
+- **Lesson:** on test, true US/India matches score lower than out of fold, so more permissive decisions win (19) and stricter ones lose (18, 23). Averaging two feature views helps on both country groups.
 
 ---
 

@@ -51,9 +51,11 @@ def main():
             zf.write(outputs / name, f"output/{name}")
         for p in sorted((ROOT / "src").glob("*.py")):
             zf.write(p, f"{PKG}/src/{p.name}")
-        for name in ("base.yaml", "stage2.yaml", "stage3.yaml", "output_la.yaml", "output_lacat.yaml"):
+        for name in ("base.yaml", "stage2.yaml", "stage3.yaml", "stage2_big.yaml", "stage3_big.yaml",
+                     "output_la.yaml", "output_lacat.yaml", "output_la_big.yaml", "output_lacat_big.yaml"):
             zf.write(ROOT / "configs" / name, f"{PKG}/configs/{name}")
-        zf.write(ROOT / "scripts" / "reproduce_best.sh", f"{PKG}/scripts/reproduce_best.sh")
+        for name in ("reproduce_best.sh", "train_big.sh"):
+            zf.write(ROOT / "scripts" / name, f"{PKG}/scripts/{name}")
         zf.write(ROOT / "docs" / "README_reproduce.md", f"{PKG}/README.md")
         zf.writestr(f"{PKG}/requirements.txt", pinned_requirements())
         zf.write(args.doc, "Documentation_template.md")

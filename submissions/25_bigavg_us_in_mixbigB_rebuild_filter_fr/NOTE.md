@@ -9,4 +9,4 @@
 - built with an inline average -> output_frmixbig/, then
   `src.combine --seen submissions/22_bigavg_us_in_bigB075_fr --unseen output_frmixbig --unseen-postfilter`
 - validator PASS
-- public LB: pending
+- public LB: 0.983405 (+0.000193 vs submission 22): best; final leaderboard submission

@@ -2,7 +2,7 @@
 
 **Team Name:** [Your Team Name]  
 **Team Members:** [List all team members]  
-**Submission Date:** [Date]
+**Submission Date:** 27 September 2026
 
 ---
 
@@ -14,7 +14,7 @@ Each Source-2/3 record belongs to at most one Source-1 entity, so we solve the t
 - **Score** the pairs with a three-stage LightGBM cascade whose later stages see how each pair compares with its competitors.
 - **Assign** each record to its best entity only when probability and margin clear thresholds tuned directly for macro F0.5.
 
-Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
+Out-of-fold macro F0.5 on the full training set is **0.9877** for the final model average; the public leaderboard score is **0.983405**.
 
 ---
 
@@ -77,8 +77,8 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
 - **Stage-1 pruning:**
   - A LightGBM ranker over retrieval scores, per-record/per-S1 ranks and gaps, and three cheap string similarities (core-name ratio, address token-set, digit-token overlap).
   - Trained out of fold.
-  - Keeps the top-[N] S1 per record with p ≥ 0.001.
-- **Candidate pairs generated (test):** [12.5M → final] (≈1.3 per record, ≈7.2 per S1), out of 3.8×10¹² possible same-country pairs.
+  - Keeps the top-8 S1 per record with p ≥ 0.001.
+- **Candidate pairs generated (test):** 11,749,613 (1.18 per record, 6.78 per S1), out of 3.8×10¹² possible same-country pairs.
 - **How we ensured true matches were not lost:**
   - Each view was added only when it raised union recall on train. Recall by view:
 
@@ -92,7 +92,7 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
     | token name | 35.5% |
     | **Union** | **98.79%** |
 
-  - Pruning was tuned on out-of-fold recall: [98.26% → final] kept.
+  - Pruning was tuned on out-of-fold recall: 98.45% of true pairs kept (98.81% before pruning).
 
 ---
 
@@ -126,10 +126,11 @@ Out-of-fold macro F0.5 on the full training set is **[0.98589 → final]**.
 - **Relative candidate counts** (`src/relcounts.py`): the number of candidates of an S1 divided by its split/country mean. The test set has more distractor records (6.4–7.5 candidates per S1 vs 5.4–5.7 in train), and a stage-2 model re-scored with the raw count raised by 22% accepted ~25–30% more false pairs.
 
 **Final configuration (two stage-2/3 models, combined per country label):**
-- **Model A** is used for S1 entities whose country label occurs in training (US, India). It has all look-alike columns plus relative candidate counts. OOF F0.5 0.98741 (US 0.98760, India 0.98713).
-- **Model B** is used for S1 entities whose label never occurs in training (France). It keeps only the categorical look-alike columns, because the continuous word-frequency values identify individual words. French filler (`fils`, `france`) fell in the range of US distractor words (`group`, `north`), and model A rejected true "drop a word, add filler" matches in France. Model B scores OOF 0.98705 and transfers better to a left-out country in both directions (Appendix B).
+- **Model A** has all look-alike columns plus relative candidate counts. OOF F0.5 0.98769 when retrained on 90% / 95% of the other folds' S1 groups (stage 2 / stage 3); 0.98741 with 45% / 75%.
+- **Model B** is used for S1 entities whose label never occurs in training (France). It keeps only the categorical look-alike columns, because the continuous word-frequency values identify individual words. French filler (`fils`, `france`) fell in the range of US distractor words (`group`, `north`), and model A rejected true "drop a word, add filler" matches in France. Model B scores OOF 0.98736 (0.98705 with less data) and transfers better to a left-out country in both directions (Appendix B).
 - Both models score the same candidate pairs, so `src/combine.py` simply takes each S1's row from the model for its label.
-- Public leaderboard for the combination: 0.982629. With the same US/India rows and France taken from the rebuild model plus the swap post-filter, it was 0.982205.
+- **US/India rows** use the mean of model A and model B probabilities at t = 0.60, m = 0.5 (OOF 0.98771). **France rows** use the mean of model B and the pre-look-alike "rebuild" model at the unseen-label threshold 0.75, then the vocabulary-swap post-filter (`src/postfilter.py`). Model B rejects look-alikes but drops some French filler matches that the rebuild keeps.
+- Public leaderboard: **0.983405**. Earlier steps: 0.982205 (France from the rebuild model plus the swap post-filter), 0.982629 (France from model B), 0.983167 (US/India averaged over A and B), 0.983212 (models retrained with more data), 0.983405 (France rows from B + rebuild, post-filtered). Stricter US/India decisions lost on the leaderboard (−0.0003), as did adding an XGBoost member (−0.0003).
 
 **Model type:** LightGBM binary classifiers (MIT license, no pretrained language models):
 - stage 1 (pruning)
@@ -144,7 +145,7 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 - (t, m) are grid-searched to maximize the exact macro F0.5 over all 2.2M training S1 entities, using out-of-fold probabilities, singletons and blocking misses included. Final in-distribution setting: t = 0.65, m = 0.6.
 - Robustness checks:
   - **Test distractor density:** weighting distractor false positives 1.9× (the test/train ratio) moves the optimum only to t ≈ 0.70, with negligible score difference.
-  - **Unseen country:** leave-one-country-out runs (Appendix B) show that a country absent from training scores 1–3 points lower. On a threshold grid up to 0.99, its best threshold is 0.75–0.90. S1 entities whose country label does not occur in training (France in the test set) therefore get their own stricter threshold, [final value]. This is a generic rule for any unseen label, not a France-specific one.
+  - **Unseen country:** leave-one-country-out runs (Appendix B) show that a country absent from training scores 1–3 points lower. On a threshold grid up to 0.99, its best threshold is 0.75–0.90. S1 entities whose country label does not occur in training (France in the test set) therefore get their own stricter threshold, 0.75 (margin 0.5). This is a generic rule for any unseen label, not a France-specific one.
 
 ---
 
@@ -162,11 +163,13 @@ All stages use 3 folds grouped by S1 entity. Every training pair gets an out-of-
 | + house numbers canonicalized (leading zeros, `No`/`N°` prefixes, `9B` = `9 bis`) | 0.9865 |
 | + look-alike features + relative candidate counts | 0.9874 |
 | + look-alike features without word-frequency values (categorical) + relative counts | 0.9871 |
+| + 2× training S1 groups per fold (model A) | 0.9877 |
+| final: mean of models A and B (US/India) | 0.9877 |
 | (tried) a fourth refinement stage (context from stage-3 probabilities) | 0.9858, not used |
 
 - **F_0.5 Score (macro):**
-  - Out-of-fold [0.98589 → final] (US [0.9863], India [0.9853]).
-  - Public leaderboard [ ].
+  - Out-of-fold 0.98771 for the final US/India average (US 0.98787, India 0.98748); model B alone 0.98736.
+  - Public leaderboard 0.983405 (final submission).
   - A further refinement round (stage 4) did not help (0.98576).
 - **Score by entity type (train OOF):**
 
