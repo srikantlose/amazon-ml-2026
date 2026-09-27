@@ -6,4 +6,4 @@
   India 0.98754) vs 0.98771 for submission 22's two-model mean
 - France rows: identical to submission 22 (B_big at 0.75)
 - 12,852 US/India rows differ from 22; validator PASS
-- public LB: pending
+- public LB: 0.98289 (-0.00032 vs submission 22): the XGBoost member hurts on test despite +0.00007 OOF; not used
