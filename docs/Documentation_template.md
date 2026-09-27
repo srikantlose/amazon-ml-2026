@@ -1,7 +1,7 @@
 # ML Challenge 2026: Business Entity Resolution Solution Template
 
-**Team Name:** [Your Team Name]  
-**Team Members:** [List all team members]  
+**Team Name:** ChickenJockey  
+**Team Members:** Srikaanth Gurumurthy, Prathmesh Sayal  
 **Submission Date:** 27 September 2026
 
 ---
