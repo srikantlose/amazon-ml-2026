@@ -6,4 +6,4 @@
   (18: -0.00029; 23, whose XGBoost member accepts ~3K fewer US/India pairs on test: -0.00032). Test true matches
   score lower than out of fold. OOF cost of 0.55 vs 0.60 on the mean is ~0.00006.
 - validator PASS
-- public LB: pending
+- public LB: 0.983155 (-0.000057 vs submission 22): 0.60 is the better US/India threshold for these models
