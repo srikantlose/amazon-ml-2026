@@ -8,4 +8,4 @@
   India 0.98748; submission 19's mean 0.98744)
 - France rows: B_big at France threshold 0.75, margin 0.50 (852,597 pairs)
 - 19,414 US/India and 6,834 France rows differ from 19; same candidate pairs; validator PASS
-- public LB: pending
+- public LB: 0.983212 (+0.000045 vs submission 19)
